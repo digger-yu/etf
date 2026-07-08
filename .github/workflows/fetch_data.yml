@@ -1,0 +1,38 @@
+name: Fetch ETF Data
+
+on:
+  schedule:
+    # 北京时间 16:40 = UTC 08:40
+    - cron: '40 8 * * 1-5'
+  workflow_dispatch: # 支持手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          pip install -r scripts/requirements.txt
+
+      - name: Fetch ETF data
+        run: |
+          python scripts/fetch_data.py
+
+      - name: Commit and push data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/etf_shares.json
+          git diff --staged --quiet || git commit -m "Update ETF share data $(date +%Y-%m-%d)" -s -S
+          git push

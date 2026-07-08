@@ -1,0 +1,16 @@
+# Python
+venv/
+venv2/
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# WorkBuddy
+.workbuddy/

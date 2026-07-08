@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETF 份额追踪 - 宽基ETF每日份额增减变化趋势</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a2332 0%, #2d3a4a 100%);
+            color: #fff;
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .header h1 { font-size: 28px; margin-bottom: 8px; }
+        .header p { font-size: 14px; color: #aab8c8; }
+        .header .update-time { font-size: 12px; color: #8a9ab8; margin-top: 4px; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .control-panel {
+            background: #fff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .control-label {
+            font-size: 13px;
+            color: #666;
+            font-weight: 500;
+        }
+        .btn-group {
+            display: inline-flex;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .btn {
+            padding: 6px 14px;
+            font-size: 12px;
+            background: #fff;
+            color: #333;
+            border: none;
+            border-right: 1px solid #d0d7de;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:last-child { border-right: none; }
+        .btn:hover { background: #e8edf3; }
+        .btn.active {
+            background: #1a2332;
+            color: #fff;
+        }
+        .summary-section { margin-bottom: 30px; }
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+        .summary-table th {
+            background: #e8edf3;
+            color: #1a2332;
+            font-weight: 600;
+            padding: 12px 16px;
+            text-align: center;
+            font-size: 13px;
+        }
+        .summary-table td {
+            padding: 10px 16px;
+            text-align: center;
+            font-size: 13px;
+            border-bottom: 1px solid #eee;
+        }
+        .summary-table tr:last-child td { border-bottom: none; }
+        .summary-table tr:hover { background: #f8f9fa; }
+        .change-up { color: #e74c3c; font-weight: 600; } /* 涨=红 */
+        .change-down { color: #27ae60; font-weight: 600; } /* 跌=绿 */
+        .shares-val { font-weight: 500; }
+        .category-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .category-tab {
+            padding: 8px 16px;
+            border: 1px solid #d0d7de;
+            border-radius: 20px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .category-tab:hover { background: #e8edf3; }
+        .category-tab.active {
+            background: #1a2332;
+            color: #fff;
+            border-color: #1a2332;
+        }
+        .chart-section {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #1a2332;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chart-title .subtitle {
+            font-size: 12px;
+            color: #8a9ab8;
+            font-weight: normal;
+        }
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(680px, 1fr));
+            gap: 20px;
+        }
+        .chart-card {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            padding: 16px;
+        }
+        .chart-card h3 {
+            font-size: 14px;
+            color: #1a2332;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chart-card h3 .badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: normal;
+        }
+        .badge-up { background: #fde8e8; color: #e74c3c; }
+        .badge-down { background: #e8f8e8; color: #27ae60; }
+        .badge-neutral { background: #e8edf3; color: #666; }
+        .chart-container { width: 100%; height: 400px; }
+        .footer {
+            text-align: center;
+            padding: 30px 20px;
+            color: #8a9ab8;
+            font-size: 12px;
+        }
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #8a9ab8;
+            font-size: 16px;
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 3px solid #e8edf3;
+            border-top: 3px solid #1a2332;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .error-msg {
+            background: #fde8e8;
+            color: #e74c3c;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .data-source-tag {
+            display: inline-block;
+            background: #e8edf3;
+            color: #666;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            margin-left: 8px;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 { font-size: 20px; }
+            .chart-grid { grid-template-columns: 1fr; }
+            .chart-container { height: 300px; }
+            .summary-table { font-size: 11px; }
+            .summary-table th, .summary-table td { padding: 6px 8px; }
+            .control-panel { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>ETF 份额追踪</h1>
+    <p>宽基ETF每日份额增减变化趋势 | 数据来源：上交所 & 深交所 ETF份额日报</p>
+    <div class="update-time" id="updateTime">加载中...</div>
+</div>
+
+<div class="container">
+    <div id="loadingArea" class="loading">
+        <div class="loading-spinner"></div>
+        <div>正在加载ETF份额数据...</div>
+    </div>
+    <div id="errorArea" class="error-msg" style="display:none;"></div>
+
+    <!-- 顶部控制面板 -->
+    <div id="controlPanel" class="control-panel" style="display:none;">
+        <div class="control-group">
+            <span class="control-label">指标：</span>
+            <div class="btn-group" id="metricGroup">
+                <button class="btn active" data-metric="shares">份额</button>
+                <button class="btn" data-metric="nav">单位净值</button>
+                <button class="btn" data-metric="aum">资产规模</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <span class="control-label">时间粒度：</span>
+            <div class="btn-group" id="periodGroup">
+                <button class="btn active" data-period="day">按天</button>
+                <button class="btn" data-period="week">按周</button>
+                <button class="btn" data-period="month">按月</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <span class="control-label">时间范围：</span>
+            <div class="btn-group" id="rangeGroup">
+                <button class="btn" data-range="30">近1月</button>
+                <button class="btn active" data-range="90">近3月</button>
+                <button class="btn" data-range="180">近半年</button>
+                <button class="btn" data-range="all">全部</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 概览汇总表 -->
+    <div id="summarySection" class="summary-section" style="display:none;">
+        <div class="chart-title">
+            最新数据概览
+            <span class="subtitle" id="summarySubtitle"></span>
+        </div>
+        <table class="summary-table" id="summaryTable">
+            <thead>
+                <tr>
+                    <th>标的</th>
+                    <th id="colMetric">最新份额(亿份)</th>
+                    <th>日变化</th>
+                    <th>日变化率</th>
+                    <th>周变化</th>
+                    <th>月变化</th>
+                </tr>
+            </thead>
+            <tbody id="summaryBody"></tbody>
+        </table>
+    </div>
+
+    <!-- 分类筛选 -->
+    <div id="categoryArea" class="category-tabs" style="display:none;">
+        <div class="category-tab active" data-category="all">全部</div>
+        <div class="category-tab" data-category="宽基">宽基指数</div>
+        <div class="category-tab" data-category="科创">科创系列</div>
+        <div class="category-tab" data-category="商品">商品ETF</div>
+        <div class="category-tab" data-category="行业">行业主题</div>
+    </div>
+
+    <!-- 总趋势图 -->
+    <div id="mainChartSection" class="chart-section" style="display:none;">
+        <div class="chart-title">
+            趋势对比图
+            <span class="subtitle" id="mainChartSubtitle"></span>
+        </div>
+        <div class="chart-container" id="mainChart"></div>
+    </div>
+
+    <!-- 日变化柱状图 -->
+    <div id="dailyChangeSection" class="chart-section" style="display:none;">
+        <div class="chart-title">
+            变化量对比
+            <span class="subtitle" id="changeChartSubtitle"></span>
+        </div>
+        <div class="chart-container" id="dailyChangeChart"></div>
+    </div>
+
+    <!-- 各标的详细图表 -->
+    <div id="detailSection" class="chart-grid" style="display:none;"></div>
+</div>
+
+<div class="footer">
+    数据来源：上海证券交易所 & 深圳证券交易所 ETF份额日报 | 每日 16:40 (北京时间) 自动更新<br>
+    同一标的不同基金公司的ETF份额已合并求和 | <span class="data-source-tag">份额=资金流向(申购赎回)</span><span class="data-source-tag">净值=资产价格</span>
+</div>
+
+<script>
+// ============================================================
+// 标的分类配置
+// ============================================================
+const TARGET_CATEGORIES = {
+    "宽基": ["上证50", "沪深300", "中证500", "中证1000", "中证A500", "深证100", "国证2000", "创业板指"],
+    "科创": ["科创50", "科创100", "科创半导体", "科创芯片", "双创50"],
+    "商品": ["黄金", "白银"],
+    "行业": ["创新药", "有色金属", "光伏", "半导体", "芯片"],
+};
+
+const TARGET_COLORS = {
+    "上证50": "#e74c3c",
+    "沪深300": "#c0392b",
+    "中证500": "#e67e22",
+    "中证1000": "#f39c12",
+    "中证A500": "#d35400",
+    "深证100": "#e91e63",
+    "国证2000": "#ff9800",
+    "创业板指": "#9b59b6",
+    "科创50": "#3498db",
+    "科创100": "#2980b9",
+    "科创半导体": "#1abc9c",
+    "科创芯片": "#16a085",
+    "双创50": "#2ecc71",
+    "黄金": "#f1c40f",
+    "白银": "#bdc3c7",
+    "创新药": "#8e44ad",
+    "有色金属": "#795548",
+    "光伏": "#ff5722",
+    "半导体": "#00bcd4",
+    "芯片": "#009688",
+};
+
+// ============================================================
+// 状态管理
+// ============================================================
+let rawData = null;
+let dates = [];
+let targets = [];
+let currentCategory = "all";
+let currentMetric = "shares";  // shares | nav | aum
+let currentPeriod = "day";      // day | week | month
+let currentRange = 90;          // 数据范围（天数），'all' 表示全部
+let charts = {};                // 缓存 chart 实例
+
+// ============================================================
+// 数据加载
+// ============================================================
+async function loadData() {
+    try {
+        const response = await fetch('./data/etf_shares.json');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        rawData = await response.json();
+        processData();
+        showUI();
+        renderAll();
+        document.getElementById('loadingArea').style.display = 'none';
+    } catch (e) {
+        document.getElementById('loadingArea').style.display = 'none';
+        const errEl = document.getElementById('errorArea');
+        errEl.style.display = 'block';
+        errEl.textContent = '数据加载失败: ' + e.message + '。请确保数据文件 docs/data/etf_shares.json 存在。';
+    }
+}
+
+function processData() {
+    const records = rawData.records;
+    dates = Object.keys(records).sort();
+    const targetSet = new Set();
+    for (const d of dates) {
+        for (const t of Object.keys(records[d])) {
+            targetSet.add(t);
+        }
+    }
+    targets = Array.from(targetSet).sort();
+}
+
+function showUI() {
+    ['controlPanel', 'summarySection', 'categoryArea', 'mainChartSection',
+     'dailyChangeSection', 'detailSection'].forEach(id => {
+        document.getElementById(id).style.display = '';
+    });
+    document.getElementById('updateTime').textContent = '最后更新: ' + (rawData.last_update || '未知');
+    initControls();
+}
+
+// ============================================================
+// 数据处理工具
+// ============================================================
+
+// 获取指定标的的时序数据 [{date, value, change, changePct}]
+function getTargetSeries(targetName, metric = 'shares') {
+    const result = [];
+    const range = getDateRange();
+    for (const d of range) {
+        const info = rawData.records[d][targetName];
+        const idx = range.indexOf(d);
+        if (!info) {
+            result.push({ date: d, value: null, change: null, changePct: null });
+            continue;
+        }
+        const value = info[metric];
+        let prevValue = null;
+        if (idx > 0) {
+            const prevInfo = rawData.records[range[idx-1]][targetName];
+            if (prevInfo) prevValue = prevInfo[metric];
+        }
+        const change = (value !== null && prevValue !== null) ? value - prevValue : null;
+        const changePct = (value !== null && prevValue !== null && prevValue !== 0)
+            ? (change / prevValue * 100) : null;
+        result.push({ date: d, value, change, changePct });
+    }
+    return result;
+}
+
+// 按周/月聚合
+function aggregateByPeriod(data, period) {
+    if (period === 'day') return data;
+
+    const groups = {};
+    for (const item of data) {
+        let key;
+        if (period === 'week') {
+            // 每周一为分界
+            const dt = new Date(item.date);
+            const day = dt.getDay();
+            const diff = dt.getDate() - day + (day === 0 ? -6 : 1);
+            const monday = new Date(dt.setDate(diff));
+            key = monday.toISOString().slice(0, 10);
+        } else if (period === 'month') {
+            key = item.date.slice(0, 7); // YYYY-MM
+        }
+        if (!groups[key]) groups[key] = item;
+        // 取每周/月的最后一天
+        else if (item.date > groups[key].date) groups[key] = item;
+    }
+    return Object.values(groups).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function getDateRange() {
+    if (currentRange === 'all' || dates.length <= currentRange) return dates;
+    return dates.slice(-currentRange);
+}
+
+function getFilteredTargets() {
+    if (currentCategory === "all") return targets;
+    const catTargets = TARGET_CATEGORIES[currentCategory] || [];
+    return targets.filter(t => catTargets.includes(t));
+}
+
+// ============================================================
+// 配置/单位
+// ============================================================
+const METRIC_CONFIG = {
+    shares: { label: '份额', unit: '亿份', yAxisName: '亿份' },
+    nav:    { label: '单位净值', unit: '元',  yAxisName: '元' },
+    aum:    { label: '资产规模', unit: '亿元', yAxisName: '亿元' },
+};
+
+function getMetricConfig() {
+    return METRIC_CONFIG[currentMetric] || METRIC_CONFIG.shares;
+}
+
+// ============================================================
+// 控件初始化
+// ============================================================
+function initControls() {
+    // 指标切换
+    document.querySelectorAll('#metricGroup .btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#metricGroup .btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentMetric = btn.dataset.metric;
+            renderAll();
+        });
+    });
+
+    // 时间粒度切换
+    document.querySelectorAll('#periodGroup .btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#periodGroup .btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentPeriod = btn.dataset.period;
+            renderAll();
+        });
+    });
+
+    // 时间范围切换
+    document.querySelectorAll('#rangeGroup .btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#rangeGroup .btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentRange = btn.dataset.range === 'all' ? 'all' : parseInt(btn.dataset.range);
+            renderAll();
+        });
+    });
+
+    // 分类切换
+    document.querySelectorAll('.category-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            currentCategory = tab.dataset.category;
+            renderMainChart();
+            renderDailyChangeChart();
+            renderDetailCharts();
+        });
+    });
+}
+
+// ============================================================
+// 渲染：概览表
+// ============================================================
+function renderAll() {
+    renderSummary();
+    renderMainChart();
+    renderDailyChangeChart();
+    renderDetailCharts();
+}
+
+function renderSummary() {
+    const tbody = document.getElementById('summaryBody');
+    tbody.innerHTML = '';
+    const cfg = getMetricConfig();
+
+    // 概览表只展示最新一天的数据，不受粒度/范围影响
+    const latestDate = dates[dates.length - 1];
+    const prevDate = dates.length > 1 ? dates[dates.length - 2] : null;
+    const weekDate = dates.length > 5 ? dates[dates.length - 6] : null;
+    const monthDate = dates.length > 22 ? dates[dates.length - 23] : null;
+
+    // 更新表头
+    document.getElementById('colMetric').textContent = `最新${cfg.label}(${cfg.unit})`;
+    document.getElementById('summarySubtitle').textContent = `截至 ${latestDate}`;
+
+    for (const t of targets) {
+        const latest = rawData.records[latestDate][t];
+        if (!latest) continue;
+        const latestVal = latest[currentMetric];
+
+        const prev = prevDate ? rawData.records[prevDate][t] : null;
+        const week = weekDate ? rawData.records[weekDate][t] : null;
+        const month = monthDate ? rawData.records[monthDate][t] : null;
+
+        const dayChg = (latestVal !== null && prev) ? latestVal - prev[currentMetric] : null;
+        const dayPct = (dayChg !== null && prev && prev[currentMetric] !== 0)
+            ? (dayChg / prev[currentMetric] * 100) : null;
+        const weekChg = (latestVal !== null && week) ? latestVal - week[currentMetric] : null;
+        const monthChg = (latestVal !== null && month) ? latestVal - month[currentMetric] : null;
+
+        const tr = document.createElement('tr');
+        const upDownClass = v => v > 0 ? 'change-up' : (v < 0 ? 'change-down' : '');
+        const sign = v => v > 0 ? '+' : '';
+
+        tr.innerHTML = `
+            <td style="font-weight:600;color:${TARGET_COLORS[t] || '#333'}">${t}</td>
+            <td class="shares-val">${latestVal !== null ? latestVal.toFixed(4) : '--'}</td>
+            <td class="${upDownClass(dayChg)}">${dayChg !== null ? sign(dayChg) + dayChg.toFixed(4) : '--'}</td>
+            <td class="${upDownClass(dayPct)}">${dayPct !== null ? sign(dayPct) + dayPct.toFixed(2) + '%' : '--'}</td>
+            <td class="${upDownClass(weekChg)}">${weekChg !== null ? sign(weekChg) + weekChg.toFixed(4) : '--'}</td>
+            <td class="${upDownClass(monthChg)}">${monthChg !== null ? sign(monthChg) + monthChg.toFixed(4) : '--'}</td>
+        `;
+        tbody.appendChild(tr);
+    }
+}
+
+// ============================================================
+// 渲染：总趋势图
+// ============================================================
+function renderMainChart() {
+    if (charts.main) charts.main.dispose();
+    charts.main = echarts.init(document.getElementById('mainChart'));
+
+    const filteredTargets = getFilteredTargets();
+    const range = getDateRange();
+    const cfg = getMetricConfig();
+
+    document.getElementById('mainChartSubtitle').textContent =
+        `${cfg.label}趋势 | ${currentPeriod === 'day' ? '按天' : (currentPeriod === 'week' ? '按周' : '按月')} | ${filteredTargets.length} 个标的`;
+
+    const series = filteredTargets.map(t => {
+        const data = aggregateByPeriod(getTargetSeries(t, currentMetric), currentPeriod);
+        return {
+            name: t,
+            type: 'line',
+            smooth: true,
+            symbol: 'circle',
+            symbolSize: 4,
+            data: data.map(d => d.value),
+            itemStyle: { color: TARGET_COLORS[t] || '#999' },
+            lineStyle: { width: 2 },
+        };
+    });
+
+    charts.main.setOption({
+        tooltip: {
+            trigger: 'axis',
+            formatter: function(params) {
+                let html = `<b>${params[0].axisValue}</b><br>`;
+                params.forEach(p => {
+                    if (p.value !== null && p.value !== undefined) {
+                        html += `${p.marker} ${p.seriesName}: ${p.value.toFixed(4)} ${cfg.unit}<br>`;
+                    }
+                });
+                return html;
+            }
+        },
+        legend: { type: 'scroll', bottom: 0, textStyle: { fontSize: 11 } },
+        grid: { left: 80, right: 30, top: 30, bottom: 60 },
+        xAxis: {
+            type: 'category',
+            data: (() => {
+                // X 轴显示范围 - 用第一个标的的数据
+                if (filteredTargets.length === 0) return [];
+                const data = aggregateByPeriod(getTargetSeries(filteredTargets[0], currentMetric), currentPeriod);
+                return data.map(d => d.date);
+            })(),
+            axisLabel: {
+                fontSize: 10,
+                formatter: v => v.length === 7 ? v : v.substring(5),
+            },
+        },
+        yAxis: {
+            type: 'value',
+            name: cfg.yAxisName,
+            nameTextStyle: { fontSize: 11 },
+            axisLabel: { fontSize: 10 },
+        },
+        dataZoom: [
+            { type: 'inside', start: 70, end: 100 },
+            { type: 'slider', start: 70, end: 100, height: 20, bottom: 40 },
+        ],
+        series,
+    }, true);
+
+    window.addEventListener('resize', () => charts.main && charts.main.resize());
+}
+
+// ============================================================
+// 渲染：日变化柱状图
+// ============================================================
+function renderDailyChangeChart() {
+    if (charts.change) charts.change.dispose();
+    charts.change = echarts.init(document.getElementById('dailyChangeChart'));
+
+    const filteredTargets = getFilteredTargets();
+    const range = getDateRange();
+    const cfg = getMetricConfig();
+
+    document.getElementById('changeChartSubtitle').textContent =
+        `${cfg.label}变化量 | ${currentPeriod === 'day' ? '按天' : (currentPeriod === 'week' ? '按周' : '按月')}`;
+
+    const series = filteredTargets.map(t => {
+        const data = aggregateByPeriod(getTargetSeries(t, currentMetric), currentPeriod);
+        return {
+            name: t,
+            type: 'bar',
+            data: data.map(d => d.change),
+            itemStyle: { color: TARGET_COLORS[t] || '#999' },
+            barMaxWidth: 16,
+        };
+    });
+
+    // X 轴 - 使用第一个标的的日期
+    let xData = [];
+    if (filteredTargets.length > 0) {
+        const data = aggregateByPeriod(getTargetSeries(filteredTargets[0], currentMetric), currentPeriod);
+        xData = data.map(d => d.date);
+    }
+
+    charts.change.setOption({
+        tooltip: {
+            trigger: 'axis',
+            formatter: function(params) {
+                let html = `<b>${params[0].axisValue}</b><br>`;
+                params.forEach(p => {
+                    if (p.value !== null && p.value !== undefined) {
+                        const sign = p.value > 0 ? '+' : '';
+                        const color = p.value > 0 ? '#e74c3c' : '#27ae60';
+                        html += `${p.marker} ${p.seriesName}: <span style="color:${color}">${sign}${p.value.toFixed(4)}</span> ${cfg.unit}<br>`;
+                    }
+                });
+                return html;
+            }
+        },
+        legend: { type: 'scroll', bottom: 0, textStyle: { fontSize: 11 } },
+        grid: { left: 80, right: 30, top: 30, bottom: 60 },
+        xAxis: {
+            type: 'category',
+            data: xData,
+            axisLabel: { fontSize: 10, formatter: v => v.length === 7 ? v : v.substring(5) },
+        },
+        yAxis: {
+            type: 'value',
+            name: `变化量(${cfg.unit})`,
+            nameTextStyle: { fontSize: 11 },
+            axisLabel: { fontSize: 10 },
+        },
+        dataZoom: [
+            { type: 'inside' },
+            { type: 'slider', height: 20, bottom: 40 },
+        ],
+        series,
+    }, true);
+
+    window.addEventListener('resize', () => charts.change && charts.change.resize());
+}
+
+// ============================================================
+// 渲染：各标的详细图表
+// ============================================================
+function renderDetailCharts() {
+    const section = document.getElementById('detailSection');
+    section.innerHTML = '';
+    const filteredTargets = getFilteredTargets();
+    const cfg = getMetricConfig();
+
+    // 清理旧的 chart 实例
+    for (const key in charts) {
+        if (key.startsWith('detail_')) {
+            charts[key].dispose();
+            delete charts[key];
+        }
+    }
+
+    filteredTargets.forEach(t => {
+        const data = getTargetSeries(t, currentMetric);
+        const dataAgg = aggregateByPeriod(data, currentPeriod);
+        const latest = dataAgg[dataAgg.length - 1];
+        const changeVal = latest ? latest.change : null;
+        const badgeClass = changeVal > 0 ? 'badge-up' : (changeVal < 0 ? 'badge-down' : 'badge-neutral');
+        const badgeText = changeVal !== null ? (changeVal > 0 ? `+${changeVal.toFixed(4)}` : (changeVal < 0 ? changeVal.toFixed(4) : '0')) : '--';
+
+        const card = document.createElement('div');
+        card.className = 'chart-card';
+        card.innerHTML = `
+            <h3>
+                <span style="color:${TARGET_COLORS[t] || '#333'}">${t} ${cfg.label}趋势</span>
+                <span class="badge ${badgeClass}">${currentPeriod === 'day' ? '日' : (currentPeriod === 'week' ? '周' : '月')}变化 ${badgeText} ${cfg.unit}</span>
+            </h3>
+            <div class="chart-container" id="chart_${t}"></div>
+        `;
+        section.appendChild(card);
+
+        // 渲染图表
+        setTimeout(() => {
+            const chartDom = document.getElementById(`chart_${t}`);
+            if (!chartDom) return;
+            const chart = echarts.init(chartDom);
+            charts[`detail_${t}`] = chart;
+            const color = TARGET_COLORS[t] || '#999';
+
+            chart.setOption({
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: function(params) {
+                        let html = `<b>${params[0].axisValue}</b><br>`;
+                        params.forEach(p => {
+                            if (p.value !== null && p.value !== undefined) {
+                                html += `${p.marker} ${p.seriesName}: ${p.value.toFixed(4)} ${cfg.unit}<br>`;
+                            }
+                        });
+                        return html;
+                    }
+                },
+                grid: { left: 70, right: 40, top: 30, bottom: 40 },
+                xAxis: {
+                    type: 'category',
+                    data: dataAgg.map(d => d.date),
+                    axisLabel: { fontSize: 9, formatter: v => v.length === 7 ? v : v.substring(5) },
+                },
+                yAxis: [
+                    {
+                        type: 'value',
+                        name: cfg.yAxisName,
+                        nameTextStyle: { fontSize: 10 },
+                        axisLabel: { fontSize: 9 },
+                        position: 'left',
+                    },
+                    {
+                        type: 'value',
+                        name: `变化(${cfg.unit})`,
+                        nameTextStyle: { fontSize: 10 },
+                        axisLabel: { fontSize: 9 },
+                        position: 'right',
+                    },
+                ],
+                dataZoom: [{ type: 'inside', start: 60 }],
+                series: [
+                    {
+                        name: cfg.label,
+                        type: 'line',
+                        smooth: true,
+                        yAxisIndex: 0,
+                        symbol: 'none',
+                        lineStyle: { width: 2, color: color },
+                        areaStyle: {
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                { offset: 0, color: color + '40' },
+                                { offset: 1, color: color + '05' },
+                            ])
+                        },
+                        data: dataAgg.map(d => d.value),
+                        itemStyle: { color: color },
+                    },
+                    {
+                        name: `${currentPeriod === 'day' ? '日' : (currentPeriod === 'week' ? '周' : '月')}变化`,
+                        type: 'bar',
+                        yAxisIndex: 1,
+                        barMaxWidth: 8,
+                        data: dataAgg.map(d => d.change),
+                        itemStyle: {
+                            color: function(params) {
+                                return params.value > 0 ? '#e74c3c' : '#27ae60';
+                            }
+                        },
+                    },
+                ],
+            });
+
+            window.addEventListener('resize', () => chart.resize());
+        }, 30);
+    });
+}
+
+// ============================================================
+// 初始化
+// ============================================================
+window.addEventListener('DOMContentLoaded', loadData);
+</script>
+
+</body>
+</html>
