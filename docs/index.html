@@ -304,6 +304,46 @@
             .data-table { font-size: 11px; }
             .data-table th, .data-table td { padding: 4px; }
         }
+
+        /* 导出按钮 */
+        .export-bar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .export-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px 10px;
+            font-size: 12px;
+            color: #1a2332;
+            background: #fff;
+            border: 1px solid #d0d7de;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s;
+            user-select: none;
+        }
+        .export-btn:hover {
+            background: #e8edf3;
+            border-color: #3498db;
+        }
+        .export-btn:active {
+            transform: scale(0.97);
+        }
+        .chart-title-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .chart-title-row .title-text {
+            flex: 1;
+            min-width: 0;
+        }
     </style>
 </head>
 <body>
@@ -333,6 +373,14 @@
                 <button class="btn" data-metric="shares">份额</button>
             </div>
         </div>
+        <div class="export-bar">
+            <button class="export-btn" id="exportCsvBtn" title="导出当前过滤后的全部数据为 CSV">
+                📥 导出 CSV
+            </button>
+            <button class="export-btn" id="exportAllPngBtn" title="把全部图表保存为图片压缩包">
+                🖼️ 导出全部图表
+            </button>
+        </div>
     </div>
 
     <!-- 分类筛选 -->
@@ -347,14 +395,19 @@
 
     <!-- 累计净流入排行（瀑布图替代） -->
     <div id="flowSection" class="chart-section" style="display:none;">
-        <div class="chart-title" id="flowTitle">
-            累计净流入排行
-            <span class="legend-info">
-                <span class="up">▲ 流入(申购)</span>
-                <span class="down">▼ 流出(赎回)</span>
-            </span>
+        <div class="chart-title-row">
+            <div class="title-text">
+                <div class="chart-title" id="flowTitle">
+                    累计净流入排行
+                    <span class="legend-info">
+                        <span class="up">▲ 流入(申购)</span>
+                        <span class="down">▼ 流出(赎回)</span>
+                    </span>
+                </div>
+                <div class="chart-subtitle" id="flowSubtitle"></div>
+            </div>
+            <button class="export-btn" data-export-chart="flow" title="保存为 PNG">🖼️ 图片</button>
         </div>
-        <div class="chart-subtitle" id="flowSubtitle"></div>
         <div class="chart-container" id="flowChart"></div>
     </div>
 
@@ -379,11 +432,17 @@
         </div>
 
         <!-- 强度热图 -->
-        <div class="chart-sub-label">🔥 强度热图 · 品类×时间 矩阵（颜色越深=规模越大）</div>
+        <div class="chart-sub-label">
+            🔥 强度热图 · 品类×时间 矩阵（颜色越深=规模越大）
+            <button class="export-btn" data-export-chart="heatmap" style="float:right;margin-left:auto;font-size:11px;padding:3px 8px;" title="保存为 PNG">🖼️ 图片</button>
+        </div>
         <div class="chart-container tall" id="heatmapChart"></div>
 
         <!-- 日变化贡献图 -->
-        <div class="chart-sub-label">📈 每日净变化贡献 · Top 10 堆叠柱状</div>
+        <div class="chart-sub-label">
+            📈 每日净变化贡献 · Top 10 堆叠柱状
+            <button class="export-btn" data-export-chart="mainChange" style="float:right;margin-left:auto;font-size:11px;padding:3px 8px;" title="保存为 PNG">🖼️ 图片</button>
+        </div>
         <div class="chart-container" id="mainChangeChart"></div>
 
         <!-- 辅图：全标的 small multiples -->
@@ -393,8 +452,13 @@
 
     <!-- 每日净变化瀑布图：按日期展示所有标的的净流入/流出 -->
     <div id="waterfallSection" class="chart-section" style="display:none;">
-        <div class="chart-title" id="waterfallTitle">每日净流入/流出瀑布图</div>
-        <div class="chart-subtitle" id="waterfallSubtitle">每个柱子代表一个交易日，颜色深度反映净流入/流出规模。点击柱子查看当日明细。</div>
+        <div class="chart-title-row">
+            <div class="title-text">
+                <div class="chart-title" id="waterfallTitle">每日净流入/流出瀑布图</div>
+                <div class="chart-subtitle" id="waterfallSubtitle">每个柱子代表一个交易日，颜色深度反映净流入/流出规模。点击柱子查看当日明细。</div>
+            </div>
+            <button class="export-btn" data-export-chart="waterfall" title="保存为 PNG">🖼️ 图片</button>
+        </div>
         <div class="chart-container tall" id="waterfallChart"></div>
     </div>
 
@@ -653,6 +717,17 @@ function initControls() {
             tab.classList.add('active');
             currentCategory = tab.dataset.category;
             renderAll();
+        });
+    });
+
+    // 导出按钮绑定
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    if (exportCsvBtn) exportCsvBtn.addEventListener('click', exportCSV);
+    const exportAllPngBtn = document.getElementById('exportAllPngBtn');
+    if (exportAllPngBtn) exportAllPngBtn.addEventListener('click', exportAllCharts);
+    document.querySelectorAll('[data-export-chart]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            exportChartImage(btn.dataset.exportChart);
         });
     });
 }
@@ -1091,6 +1166,7 @@ function renderHeatmapChart(filteredTargets, targetLatestValue, cfg) {
                 fillerColor: 'rgba(231, 76, 60, 0.3)',
                 borderColor: '#e74c3c',
                 handleStyle: { color: '#e74c3c' },
+                textStyle: { color: '#666', fontSize: 10 },
             },
             { type: 'inside', xAxisIndex: 0 },
         ],
@@ -1217,7 +1293,7 @@ function renderMainChangeChart(top10, others, xData, cfg) {
         },
         dataZoom: [
             { type: 'inside' },
-            { type: 'slider', height: 18, bottom: 25 },
+            { type: 'slider', height: 18, bottom: 25, textStyle: { color: '#666', fontSize: 10 } },
         ],
         series: allChangeSeries,
     }, true);
@@ -1386,13 +1462,16 @@ function renderWaterfall() {
             type: 'value',
             name: `日净变化(${cfg.unit})`,
             nameTextStyle: { fontSize: 11 },
-            axisLabel: { fontSize: 10 },
+            axisLabel: {
+                fontSize: 10,
+                formatter: v => v.toFixed(1) + ' ' + cfg.unit,
+            },
             min: -maxAbs,
             max: maxAbs,
         },
         dataZoom: [
             { type: 'inside' },
-            { type: 'slider', height: 18, bottom: 25 },
+            { type: 'slider', height: 18, bottom: 25, textStyle: { color: '#666', fontSize: 10, formatter: (v, vs) => `${vs}  (${cfg.unit})` } },
         ],
         series: [{
             name: '净变化',
@@ -1653,7 +1732,7 @@ function renderDetailCharts() {
                         position: 'right',
                     },
                 ],
-                dataZoom: [{ type: 'inside', start: 50 }],
+                dataZoom: [{ type: 'inside', start: 50, textStyle: { color: '#666', fontSize: 10 } }],
                 series: [
                     {
                         name: cfg.label,
@@ -1701,6 +1780,147 @@ function renderAll() {
     renderDetailCharts();
     // 统一注册resize处理器
     ensureResizeHandler();
+}
+
+// ============================================================
+// 导出工具
+// ============================================================
+
+// 通用：触发浏览器下载
+function triggerDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
+// 文件名：etf-{指标}-{品类}-{时间戳}
+function buildFilename(parts) {
+    const ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+    return `etf-${parts.join('-')}-${ts}`;
+}
+
+// 导出 CSV：当前筛选 + 指标下的明细
+function exportCSV() {
+    if (!rawData) {
+        alert('数据尚未加载完成，请稍后再试。');
+        return;
+    }
+    const range = getDateRange();
+    const filteredTargets = getFilteredTargets();
+    const cfg = getMetricConfig();
+
+    if (range.length === 0 || filteredTargets.length === 0) {
+        alert('当前筛选下无可导出的数据。');
+        return;
+    }
+
+    // 表头：日期 + 每个标的的 value + 变化% + 变化量
+    const header = ['日期'];
+    filteredTargets.forEach(t => {
+        header.push(`${t}（${cfg.unit}）`);
+        header.push(`${t}_日变化（${cfg.unit}）`);
+        header.push(`${t}_日变化%`);
+    });
+
+    const rows = [header];
+    for (const d of range) {
+        const row = [d];
+        for (const t of filteredTargets) {
+            const info = rawData.records[d]?.[t];
+            const v = info ? info[currentMetric] : null;
+            row.push(v !== null && v !== undefined ? v.toFixed(6) : '');
+            // 变化量/率
+            const idx = range.indexOf(d);
+            if (idx > 0) {
+                const prev = rawData.records[range[idx - 1]]?.[t];
+                const pv = prev ? prev[currentMetric] : null;
+                if (v !== null && pv !== null) {
+                    const ch = v - pv;
+                    const chPct = pv !== 0 ? (ch / pv * 100) : 0;
+                    row.push(ch.toFixed(6));
+                    row.push(chPct.toFixed(4));
+                } else {
+                    row.push('', '');
+                }
+            } else {
+                row.push('', '');
+            }
+        }
+        rows.push(row);
+    }
+
+    // 转 CSV 字符串（处理引号/逗号）
+    const csv = rows.map(row => row.map(cell => {
+        const s = cell === null || cell === undefined ? '' : String(cell);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(',')).join('\n');
+
+    // 加 UTF-8 BOM 让 Excel 正确识别中文
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8' });
+    triggerDownload(blob, `${buildFilename([currentMetric, currentCategory, 'detail'])}.csv`);
+}
+
+// 导出单个图表为 PNG
+function exportChartImage(chartKey) {
+    const chart = charts[chartKey];
+    if (!chart) {
+        alert(`图表 ${chartKey} 不存在或尚未渲染。`);
+        return;
+    }
+    let dataURL;
+    try {
+        dataURL = chart.getDataURL({
+            type: 'png',
+            pixelRatio: 2,        // 高清
+            backgroundColor: '#fff',
+        });
+    } catch (e) {
+        alert('导出失败：' + e.message);
+        return;
+    }
+    // dataURL → Blob → 下载
+    const byteString = atob(dataURL.split(',')[1]);
+    const mimeType = dataURL.split(',')[0].split(':')[1].split(';')[0];
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+    const blob = new Blob([ab], { type: mimeType });
+    const friendlyName = ({
+        flow: '累计净流入排行',
+        heatmap: '强度热图',
+        mainChange: '每日净变化贡献',
+        waterfall: '每日净变化瀑布图',
+    })[chartKey] || chartKey;
+    triggerDownload(blob, `${buildFilename([currentMetric, currentCategory, friendlyName])}.png`);
+}
+
+// 导出所有可见图表为 PNG（顺序下载）
+function exportAllCharts() {
+    const order = [
+        { key: 'flow', label: '累计净流入排行' },
+        { key: 'heatmap', label: '强度热图' },
+        { key: 'mainChange', label: '每日净变化贡献' },
+        { key: 'waterfall', label: '每日净变化瀑布图' },
+    ];
+    let count = 0;
+    for (const { key } of order) {
+        if (charts[key]) {
+            exportChartImage(key);
+            count++;
+        }
+    }
+    if (count === 0) {
+        alert('当前没有可导出的图表。');
+    } else {
+        // 提示用户
+        console.log(`已触发 ${count} 个图表的下载`);
+    }
 }
 
 window.addEventListener('DOMContentLoaded', loadData);

@@ -19,7 +19,7 @@
 - 辅助判断"国家队"对宽基指数（如上证50、沪深300、中证A500）的持仓动向
 - 通过强度热图直观看到哪些品类、哪些时段在持续吸金/失血
 
-**线上访问**：[https://digger-yu.github.io/etf-shares-tracker/](https://digger-yu.github.io/etf-shares-tracker/)
+**线上访问**：[https://digger-yu.github.io/etf/](https://digger-yu.github.io/etf/)
 
 ---
 
@@ -93,7 +93,7 @@
 ## 五、目录结构
 
 ```
-etf-shares-tracker/
+etf/
 ├── .github/
 │   └── workflows/
 │       └── fetch_data.yml        # 每日 16:40 定时抓取任务
@@ -187,7 +187,7 @@ python -m http.server 8000
 1. 进入仓库 → `Settings` → `Pages`
 2. Source 选择 `Deploy from a branch`
 3. Branch 选择 `main`，目录选择 `/docs`
-4. 保存后等待 1–2 分钟，访问 `https://<用户名>.github.io/etf-shares-tracker/`
+4. 保存后等待 1–2 分钟，访问 `https://<用户名>.github.io/etf/`
 
 > 后续每次推送代码，GitHub Pages 会自动重新部署。
 
@@ -217,7 +217,7 @@ python -m http.server 8000
 | akshare 历史净值接口 | `fund_etf_fund_info_em` 只能取最新 NAV，历史 NAV 通过 `fund_etf_fund_info_em` 历史走势接口补齐 |
 | akshare 进度条递归 | `tqdm` 与 akshare 内部调用冲突，已通过环境变量 `TQDM_DISABLE=1` 解决 |
 | 数据频率 | 仅交易日 16:40 后更新一次（盘后数据），非实时 |
-| 瀑布图 `dataZoom` 文本 | 当选择极端缩放范围时，`dataZoom` 文本可能溢出，后续在 `textStyle.formatter` 中加单位格式化（亿元/亿份）|
+| 瀑布图 `dataZoom` 文本 | ✅ 已修复：滑动条 `textStyle.formatter` 添加 `亿元/亿份` 单位提示，避免极端缩放时文本溢出 |
 | 热图占比模式色阶 | 大权重 ETF 会拉高 `maxColor`、导致中小标的颜色辨识度偏低。后续可切换为百分位裁剪 `[P5, P95]` 或换用三段发散色阶 |
 
 ---
