@@ -1061,16 +1061,29 @@ function renderHeatmapChart(filteredTargets, targetLatestValue, cfg) {
         }
     }
 
+    // 占比模式：仅 Top 5 重点品类着色，其他品类 value 设为 0（映射到色阶起始位＝最浅色）
+    // 视觉上与绝对值“前 5 重点 + 其他浅色”一致
+    const TOP_N_FOR_COLOR = 5;
+    const top5Set = new Set(sorted.slice(0, TOP_N_FOR_COLOR));
+    if (isPct) {
+        for (const d of heatData) {
+            const t = yCategories[d[1]];
+            if (!top5Set.has(t)) {
+                d[2] = 0;
+            }
+        }
+    }
+
     // 计算 visualMap 范围
     let vMin = 0, vMax = 0;
     if (isPct) {
-        // 占比模式：上限取实际最大值（可能远小于100）
-        const values = heatData.map(d => d[2]);
-        vMin = 0;
-        vMax = values.length > 0 ? Math.max(...values) : 100;
+        // 占比模式：vMax 取 Top 5 中的最大值（保证非 Top 5 始终位于最浅色区段）
+        const top5Values = heatData
+            .filter(d => top5Set.has(yCategories[d[1]]))
+            .map(d => d[2]);
+        vMax = top5Values.length > 0 ? Math.max(...top5Values) : 100;
     } else {
         const values = heatData.map(d => d[2]);
-        vMin = 0;
         vMax = values.length > 0 ? Math.max(...values) : 100;
     }
 
