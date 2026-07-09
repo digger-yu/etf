@@ -180,16 +180,26 @@ python -m http.server 8000
   4. 运行 `fetch_data.py`
   5. 自动提交 `docs/data/etf_shares.json` 并推送
 
-### 7.2 GitHub Pages 托管
+### 7.2 GitHub Actions 自动部署 Pages
+
+部署工作流定义在 [`.github/workflows/pages.yml`](.github/workflows/pages.yml)：
+
+- **触发条件**：`push` 到 `main` 分支（覆盖数据更新 / 文档修改 / 配置变更等场景），或 `workflow_dispatch` 手动触发
+- **执行步骤**：
+  1. 检出代码（`actions/checkout@v4`）
+  2. 配置 Pages（`actions/configure-pages@v5`）
+  3. 上传 `docs/` 目录作为 Pages 工件（`actions/upload-pages-artifact@v3`）
+  4. 部署到 GitHub Pages（`actions/deploy-pages@v4`）
+- **权限**：`contents: read` + `pages: write` + `id-token: write`
+- **并发控制**：`pages` group 串行执行，避免部署竞态
 
 **首次启用步骤**：
 
 1. 进入仓库 → `Settings` → `Pages`
-2. Source 选择 `Deploy from a branch`
-3. Branch 选择 `main`，目录选择 `/docs`
-4. 保存后等待 1–2 分钟，访问 `https://<用户名>.github.io/etf/`
+2. Source 选择 `GitHub Actions`
+3. 保存后即可自动部署
 
-> 后续每次推送代码，GitHub Pages 会自动重新部署。
+> 后续每次 `main` 分支 push，Actions 都会自动重新部署（包括 force push），无需手动触发。
 
 ---
 
