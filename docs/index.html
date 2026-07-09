@@ -287,6 +287,13 @@
             </div>
         </div>
         <div class="control-group">
+            <span class="control-label">趋势对比：</span>
+            <div class="btn-group" id="trendModeGroup">
+                <button class="btn active" data-trend="absolute">绝对值</button>
+                <button class="btn" data-trend="normalized">归一化%</button>
+            </div>
+        </div>
+        <div class="control-group">
             <span class="control-label">时间范围：</span>
             <div class="btn-group" id="rangeGroup">
                 <button class="btn" data-range="30">近1月</button>
@@ -327,11 +334,11 @@
         <div class="chart-container" id="mainChart"></div>
     </div>
 
-    <!-- 每日变化热力图 -->
-    <div id="heatmapSection" class="chart-section" style="display:none;">
-        <div class="chart-title">每日变化热力图</div>
-        <div class="chart-subtitle">颜色越红代表当日流入越多，颜色越绿代表流出越多。空白为非交易日。</div>
-        <div class="chart-container tall" id="heatmapChart"></div>
+    <!-- 每日净变化瀑布图：按日期展示所有标的的净流入/流出 -->
+    <div id="waterfallSection" class="chart-section" style="display:none;">
+        <div class="chart-title" id="waterfallTitle">每日净流入/流出瀑布图</div>
+        <div class="chart-subtitle" id="waterfallSubtitle">每个柱子代表一个交易日，颜色深度反映净流入/流出规模。点击柱子查看当日明细。</div>
+        <div class="chart-container tall" id="waterfallChart"></div>
     </div>
 
     <!-- 详细数据表（带 Sparkline） -->
@@ -410,6 +417,7 @@ let currentCategory = "all";
 let currentMetric = "aum";
 let currentPeriod = "day";
 let currentRange = 90;
+let currentTrendMode = "absolute";  // 'absolute' | 'normalized'（归一化%=以起始日为100%）
 let charts = {};
 let tableSortKey = 'cumulativeChange';
 let tableSortDir = 'desc';
@@ -511,7 +519,7 @@ function processData() {
 
 function showUI() {
     ['kpiRow', 'controlPanel', 'categoryArea', 'flowSection', 'mainChartSection',
-     'heatmapSection', 'tableSection', 'detailSection'].forEach(id => {
+     'waterfallSection', 'tableSection', 'detailSection'].forEach(id => {
         document.getElementById(id).style.display = '';
     });
     document.getElementById('updateTime').textContent = '最后更新: ' + (rawData.last_update || '未知');
@@ -546,6 +554,15 @@ function initControls() {
             btn.classList.add('active');
             currentRange = btn.dataset.range === 'all' ? 'all' : parseInt(btn.dataset.range);
             renderAll();
+        });
+    });
+
+    document.querySelectorAll('#trendModeGroup .btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#trendModeGroup .btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentTrendMode = btn.dataset.trend;
+            renderMainChart();
         });
     });
 
@@ -749,7 +766,7 @@ function renderFlowRanking() {
 }
 
 // ============================================================
-// 总趋势图
+// 总趋势图（支持绝对值/归一化两种模式）
 // ============================================================
 function renderMainChart() {
     if (charts.main) charts.main.dispose();
@@ -760,17 +777,30 @@ function renderMainChart() {
     const cfg = getMetricConfig();
 
     document.getElementById('mainChartTitle').textContent = `${cfg.label}趋势对比`;
+    const modeLabel = currentTrendMode === 'normalized' ? '归一化 (起始日=100%)' : '绝对值';
     document.getElementById('mainChartSubtitle').textContent =
-        `${currentPeriod === 'day' ? '按天' : (currentPeriod === 'week' ? '按周' : '按月')} | 范围: ${range[0]} ~ ${range[range.length-1]} | 共 ${filteredTargets.length} 个标的`;
+        `${currentPeriod === 'day' ? '按天' : (currentPeriod === 'week' ? '按周' : '按月')} | 范围: ${range[0]} ~ ${range[range.length-1]} | 模式: ${modeLabel} | 共 ${filteredTargets.length} 个标的`;
 
     const series = filteredTargets.map(t => {
-        const data = aggregateByPeriod(getTargetSeries(t, currentMetric), currentPeriod);
+        const raw = aggregateByPeriod(getTargetSeries(t, currentMetric), currentPeriod);
+        let data;
+        if (currentTrendMode === 'normalized') {
+            // 归一化：起始日为 100
+            const first = raw.length > 0 ? raw[0].value : null;
+            if (first && first !== 0) {
+                data = raw.map(d => first !== 0 ? round((d.value / first) * 100, 4) : null);
+            } else {
+                data = raw.map(() => null);
+            }
+        } else {
+            data = raw.map(d => d.value);
+        }
         return {
             name: t,
             type: 'line',
             smooth: true,
             symbol: 'none',
-            data: data.map(d => d.value),
+            data,
             itemStyle: { color: TARGET_COLORS[t] || '#999' },
             lineStyle: { width: 1.5 },
             emphasis: { focus: 'series', lineStyle: { width: 3 } },
@@ -784,6 +814,11 @@ function renderMainChart() {
         xData = data.map(d => d.date);
     }
 
+    const yAxisName = currentTrendMode === 'normalized' ? '起始日=100%' : cfg.yAxisName;
+    const yAxisFormatter = currentTrendMode === 'normalized'
+        ? v => v.toFixed(0) + '%'
+        : v => v.toFixed(0);
+
     charts.main.setOption({
         tooltip: {
             trigger: 'axis',
@@ -791,7 +826,10 @@ function renderMainChart() {
                 let html = `<b>${params[0].axisValue}</b><br>`;
                 params.slice(0, 10).forEach(p => {  // 限制显示前10个
                     if (p.value !== null && p.value !== undefined) {
-                        html += `${p.marker} ${p.seriesName}: ${p.value.toFixed(2)} ${cfg.unit}<br>`;
+                        const displayVal = currentTrendMode === 'normalized'
+                            ? p.value.toFixed(2) + '%'
+                            : p.value.toFixed(2) + ' ' + cfg.unit;
+                        html += `${p.marker} ${p.seriesName}: ${displayVal}<br>`;
                     }
                 });
                 if (params.length > 10) html += `... 等共 ${params.length} 个标的`;
@@ -812,9 +850,9 @@ function renderMainChart() {
         },
         yAxis: {
             type: 'value',
-            name: cfg.yAxisName,
+            name: yAxisName,
             nameTextStyle: { fontSize: 11 },
-            axisLabel: { fontSize: 10 },
+            axisLabel: { fontSize: 10, formatter: yAxisFormatter },
         },
         dataZoom: [
             { type: 'inside', start: 70, end: 100 },
@@ -827,96 +865,122 @@ function renderMainChart() {
 }
 
 // ============================================================
-// 热力图
+// 每日净变化瀑布图（替代热力图，更直观）
 // ============================================================
-function renderHeatmap() {
-    if (charts.heatmap) charts.heatmap.dispose();
-    charts.heatmap = echarts.init(document.getElementById('heatmapChart'));
+function renderWaterfall() {
+    if (charts.waterfall) charts.waterfall.dispose();
+    charts.waterfall = echarts.init(document.getElementById('waterfallChart'));
 
     const range = getDateRange();
     const filteredTargets = getFilteredTargets();
     const cfg = getMetricConfig();
 
-    // 只取最近 60 个交易日（避免太宽）
-    const recentRange = range.slice(-60);
+    document.getElementById('waterfallTitle').textContent = `${cfg.label} · 每日净变化瀑布图`;
+    document.getElementById('waterfallSubtitle').textContent =
+        `每个柱子 = 该交易日所有标的的${cfg.label}净变化总和（亿元/亿份/%）。红柱=净流入，绿柱=净流出。` +
+        `鼠标悬停查看明细。范围: ${range[0]} ~ ${range[range.length-1]}。`;
 
-    // 计算热力图数据
-    const data = [];
-    let maxAbs = 0;
-    for (let ti = 0; ti < filteredTargets.length; ti++) {
-        const t = filteredTargets[ti];
-        for (let di = 0; di < recentRange.length; di++) {
-            const d = recentRange[di];
-            const series = getTargetSeries(t, currentMetric);
-            const item = series.find(s => s.date === d);
-            if (item && item.changePct !== null) {
-                data.push([di, ti, item.changePct]);
-                maxAbs = Math.max(maxAbs, Math.abs(item.changePct));
-            } else {
-                data.push([di, ti, '-']);
+    // 每日净变化（当前指标）
+    const seriesData = [];
+    for (let i = 1; i < range.length; i++) {
+        const d = range[i];
+        const prev = range[i - 1];
+        let dailyChange = 0;
+        const targetDetails = [];
+        for (const t of filteredTargets) {
+            const cur = rawData.records[d]?.[t]?.[currentMetric];
+            const pre = rawData.records[prev]?.[t]?.[currentMetric];
+            if (cur !== null && cur !== undefined && pre !== null && pre !== undefined) {
+                const ch = cur - pre;
+                dailyChange += ch;
+                targetDetails.push({ target: t, change: ch, from: pre, to: cur });
             }
         }
+        // 按变化绝对值排序
+        targetDetails.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+        seriesData.push({
+            date: d,
+            value: dailyChange,
+            details: targetDetails,
+        });
     }
 
-    charts.heatmap.setOption({
+    const dates = seriesData.map(s => s.date);
+    const values = seriesData.map(s => s.value);
+    const colors = values.map(v => v > 0 ? '#e74c3c' : (v < 0 ? '#27ae60' : '#999'));
+
+    // 计算 Y 轴范围（对称）
+    const maxAbs = Math.max(...values.map(Math.abs)) * 1.1;
+
+    charts.waterfall.setOption({
         tooltip: {
-            position: 'top',
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
             formatter: function(params) {
-                if (params.value[2] === '-' || params.value[2] === null) return '无数据';
-                const sign = params.value[2] > 0 ? '+' : '';
-                return `${filteredTargets[params.value[1]]}<br>${recentRange[params.value[0]]}<br>${sign}${params.value[2].toFixed(2)}%`;
+                const idx = params[0].dataIndex;
+                const item = seriesData[idx];
+                const sign = item.value > 0 ? '+' : '';
+                const color = item.value > 0 ? '#e74c3c' : '#27ae60';
+                let html = `<b>${item.date}</b><br>
+                    合计净变化: <b style="color:${color}">${sign}${item.value.toFixed(2)} ${cfg.unit}</b><br>
+                    <hr style="margin:4px 0;border:none;border-top:1px solid #eee;">
+                    <div style="max-height:280px;overflow-y:auto;">`;
+                item.details.slice(0, 15).forEach(d => {
+                    const dSign = d.change > 0 ? '+' : '';
+                    const dColor = d.change > 0 ? '#e74c3c' : '#27ae60';
+                    html += `<div style="display:flex;justify-content:space-between;gap:12px;font-size:11px;">
+                        <span>${d.target}</span>
+                        <span style="color:${dColor};font-weight:600">${dSign}${d.change.toFixed(2)} ${cfg.unit}</span>
+                    </div>`;
+                });
+                if (item.details.length > 15) {
+                    html += `<div style="font-size:10px;color:#999;margin-top:4px;">... 等共 ${item.details.length} 个标的</div>`;
+                }
+                html += `</div>`;
+                return html;
             }
         },
-        grid: { left: 100, right: 30, top: 30, bottom: 80 },
+        grid: { left: 80, right: 30, top: 30, bottom: 60 },
         xAxis: {
             type: 'category',
-            data: recentRange,
-            splitArea: { show: true },
-            axisLabel: { fontSize: 9, rotate: 45, formatter: v => v.length === 7 ? v : v.substring(5) },
+            data: dates,
+            axisLabel: { fontSize: 10, formatter: v => v.length === 7 ? v : v.substring(5) },
         },
         yAxis: {
-            type: 'category',
-            data: filteredTargets,
-            splitArea: { show: true },
-            axisLabel: {
-                fontSize: 10,
-                formatter: v => {
-                    const color = TARGET_COLORS[v] || '#333';
-                    return `{${v.replace(/[^a-zA-Z0-9]/g, '_')}|${v}}`;
-                },
-                rich: Object.fromEntries(
-                    Object.entries(TARGET_COLORS).map(([k, v]) => [k.replace(/[^a-zA-Z0-9]/g, '_'), { color: v, fontWeight: 600 }])
-                ),
-            },
-        },
-        visualMap: {
+            type: 'value',
+            name: `日净变化(${cfg.unit})`,
+            nameTextStyle: { fontSize: 11 },
+            axisLabel: { fontSize: 10 },
             min: -maxAbs,
             max: maxAbs,
-            calculable: true,
-            orient: 'horizontal',
-            left: 'center',
-            bottom: 10,
-            inRange: {
-                color: ['#27ae60', '#a8d8b8', '#f5f7fa', '#f5b7b1', '#e74c3c'],
-            },
-            text: ['流入(%)', '流出(%)'],
-            textStyle: { fontSize: 10 },
         },
+        dataZoom: [
+            { type: 'inside' },
+            { type: 'slider', height: 18, bottom: 25 },
+        ],
         series: [{
-            name: '变化率',
-            type: 'heatmap',
-            data: data,
-            label: { show: false },
-            emphasis: {
-                itemStyle: {
-                    shadowBlur: 10,
-                    shadowColor: 'rgba(0, 0, 0, 0.5)'
-                }
+            name: '净变化',
+            type: 'bar',
+            data: values.map((v, i) => ({
+                value: v,
+                itemStyle: { color: colors[i] }
+            })),
+            barMaxWidth: 22,
+            label: {
+                show: values.length <= 30,  // 太多柱子时不显示标签
+                position: 'top',
+                formatter: p => {
+                    const v = p.value;
+                    if (Math.abs(v) < maxAbs * 0.05) return '';  // 太小不显示
+                    return (v > 0 ? '+' : '') + v.toFixed(0);
+                },
+                fontSize: 9,
+                color: '#555',
             },
         }],
     }, true);
 
-    window.addEventListener('resize', () => charts.heatmap && charts.heatmap.resize());
+    window.addEventListener('resize', () => charts.waterfall && charts.waterfall.resize());
 }
 
 // ============================================================
@@ -1193,7 +1257,7 @@ function renderAll() {
     renderKPIs();
     renderFlowRanking();
     renderMainChart();
-    renderHeatmap();
+    renderWaterfall();
     renderTable();
     renderDetailCharts();
 }
