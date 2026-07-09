@@ -14,3 +14,9 @@ Thumbs.db
 
 # WorkBuddy
 .workbuddy/
+
+# 临时截图与调试产物
+screenshot_*.png
+test_*.png
+view_*.png
+debug_*.png
