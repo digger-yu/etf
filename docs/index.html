@@ -127,6 +127,51 @@
         .chart-controls-inline .btn-group {
             box-shadow: 0 1px 2px rgba(0,0,0,0.04);
         }
+        .chart-sub-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #4a5568;
+            margin-top: 16px;
+            margin-bottom: 8px;
+            padding-left: 4px;
+            border-left: 3px solid #3498db;
+        }
+        .small-multiples-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .small-multiple {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 8px;
+            background: #fff;
+            transition: all 0.15s;
+            cursor: pointer;
+        }
+        .small-multiple:hover {
+            border-color: #3498db;
+            box-shadow: 0 2px 6px rgba(52, 152, 219, 0.15);
+            transform: translateY(-1px);
+        }
+        .small-multiple-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #1a2332;
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .small-multiple-chart {
+            width: 100%;
+            height: 50px;
+        }
+        .small-multiple-change {
+            font-size: 11px;
+            font-weight: 600;
+        }
 
         /* 双栏布局 */
         .chart-grid {
@@ -313,11 +358,11 @@
         <div class="chart-container" id="flowChart"></div>
     </div>
 
-    <!-- 总趋势图（多线） -->
+    <!-- 资产规模结构：主图 = Top 10 堆叠面积，辅图 = 全标的 small multiples -->
     <div id="mainChartSection" class="chart-section" style="display:none;">
         <div class="chart-header">
             <div>
-                <div class="chart-title" id="mainChartTitle"></div>
+                <div class="chart-title" id="mainChartTitle">资产规模结构与走势</div>
                 <div class="chart-subtitle" id="mainChartSubtitle"></div>
             </div>
             <div class="chart-controls-inline">
@@ -328,7 +373,12 @@
                 </div>
             </div>
         </div>
+        <!-- 主图：Top 10 堆叠面积 -->
+        <div class="chart-sub-label">📊 资金结构 · Top 10 堆叠面积</div>
         <div class="chart-container" id="mainChart"></div>
+        <!-- 辅图：全标的 small multiples -->
+        <div class="chart-sub-label">📈 个体走势 · 小型多图（点击放大）</div>
+        <div class="small-multiples-grid" id="smallMultiplesGrid"></div>
     </div>
 
     <!-- 每日净变化瀑布图：按日期展示所有标的的净流入/流出 -->
@@ -742,7 +792,7 @@ function renderFlowRanking() {
 }
 
 // ============================================================
-// 总趋势图
+// 资产规模结构与走势：主图 = Top 10 堆叠面积 + 辅图 = small multiples
 // ============================================================
 function renderMainChart() {
     if (charts.main) charts.main.dispose();
@@ -752,72 +802,202 @@ function renderMainChart() {
     const range = getDateRange();
     const cfg = getMetricConfig();
 
-    document.getElementById('mainChartTitle').textContent = `${cfg.label}趋势对比`;
+    const periodLabel = currentMainPeriod === 'day' ? '按天' : (currentMainPeriod === 'week' ? '按周' : '按月');
     document.getElementById('mainChartSubtitle').textContent =
-        `${currentMainPeriod === 'day' ? '按天' : (currentMainPeriod === 'week' ? '按周' : '按月')} | 全部时间: ${range[0]} ~ ${range[range.length-1]} | 共 ${filteredTargets.length} 个标的`;
+        `${periodLabel} | ${cfg.label} | ${range[0]} ~ ${range[range.length-1]} | Top 10 + 其他 (其余${Math.max(0, filteredTargets.length - 10)}个归入"其他")`;
 
-    const series = filteredTargets.map(t => {
+    // ============ 计算每个标的的"代表值"用于排名（用最新日期的值）============
+    const targetLatestValue = {};
+    for (const t of filteredTargets) {
+        const series = getTargetSeries(t, currentMetric);
+        const lastValid = series.filter(s => s.value !== null).slice(-1)[0];
+        targetLatestValue[t] = lastValid ? lastValid.value : 0;
+    }
+
+    // ============ 主图：Top 10 堆叠面积 ============
+    const sorted = filteredTargets.slice().sort((a, b) => (targetLatestValue[b] || 0) - (targetLatestValue[a] || 0));
+    const top10 = sorted.slice(0, 10);
+    const others = sorted.slice(10);
+
+    // X 轴
+    let xData = [];
+    if (top10.length > 0) {
+        const data = aggregateByPeriod(getTargetSeries(top10[0], currentMetric), currentMainPeriod);
+        xData = data.map(d => d.date);
+    }
+
+    // 每个 top10 一个堆叠层
+    const topSeries = top10.map(t => {
         const data = aggregateByPeriod(getTargetSeries(t, currentMetric), currentMainPeriod);
         return {
             name: t,
             type: 'line',
+            stack: 'total',
             smooth: true,
             symbol: 'none',
             data: data.map(d => d.value),
             itemStyle: { color: TARGET_COLORS[t] || '#999' },
-            lineStyle: { width: 1.8 },
-            emphasis: { focus: 'series', lineStyle: { width: 3 } },
+            lineStyle: { width: 0.5 },
+            emphasis: { focus: 'series' },
         };
     });
 
-    // X 轴数据
-    let xData = [];
-    if (filteredTargets.length > 0) {
-        const data = aggregateByPeriod(getTargetSeries(filteredTargets[0], currentMetric), currentMainPeriod);
-        xData = data.map(d => d.date);
+    // 其他标的汇总成一条
+    let otherSeries = null;
+    if (others.length > 0) {
+        otherSeries = {
+            name: '其他',
+            type: 'line',
+            stack: 'total',
+            smooth: true,
+            symbol: 'none',
+            data: xData.map((_, i) => {
+                let sum = 0;
+                for (const t of others) {
+                    const data = aggregateByPeriod(getTargetSeries(t, currentMetric), currentMainPeriod);
+                    sum += (data[i]?.value || 0);
+                }
+                return sum;
+            }),
+            itemStyle: { color: '#bdc3c7' },
+            lineStyle: { width: 0.5 },
+        };
     }
+
+    const allSeries = otherSeries ? [...topSeries, otherSeries] : topSeries;
 
     charts.main.setOption({
         tooltip: {
             trigger: 'axis',
+            axisPointer: { type: 'cross' },
             formatter: function(params) {
                 let html = `<b>${params[0].axisValue}</b><br>`;
-                params.slice(0, 10).forEach(p => {  // 限制显示前10个
+                let total = 0;
+                params.forEach(p => {
+                    if (p.value && typeof p.value === 'number') total += p.value;
+                });
+                html += `<span style="color:#666;">总规模: <b>${total.toFixed(2)} ${cfg.unit}</b></span><br>`;
+                html += `<div style="max-height:300px;overflow-y:auto;margin-top:4px;">`;
+                params.slice().reverse().forEach(p => {
                     if (p.value !== null && p.value !== undefined) {
-                        html += `${p.marker} ${p.seriesName}: ${p.value.toFixed(2)} ${cfg.unit}<br>`;
+                        const pct = total > 0 ? (p.value / total * 100).toFixed(1) : 0;
+                        html += `${p.marker} ${p.seriesName}: ${p.value.toFixed(2)} (${pct}%)<br>`;
                     }
                 });
-                if (params.length > 10) html += `... 等共 ${params.length} 个标的`;
+                html += `</div>`;
                 return html;
             }
         },
         legend: {
             type: 'scroll',
             bottom: 0,
-            textStyle: { fontSize: 11 },
-            data: filteredTargets.map(t => ({ name: t, icon: 'rect' })),
+            textStyle: { fontSize: 10 },
+            data: allSeries.map(s => s.name),
         },
         grid: { left: 80, right: 30, top: 30, bottom: 60 },
         xAxis: {
             type: 'category',
             data: xData,
             axisLabel: { fontSize: 10, formatter: v => v.length === 7 ? v : v.substring(5) },
+            boundaryGap: false,
         },
         yAxis: {
             type: 'value',
-            name: cfg.yAxisName,
+            name: `总${cfg.label}`,
             nameTextStyle: { fontSize: 11 },
             axisLabel: { fontSize: 10 },
-            scale: true,  // 不强制从0开始，能更明显看到变化
         },
         dataZoom: [
             { type: 'inside' },
             { type: 'slider', height: 18, bottom: 25 },
         ],
-        series,
+        series: allSeries,
     }, true);
 
-    window.addEventListener('resize', () => charts.main && charts.main.resize());
+    // ============ 辅图：small multiples（所有标的）============
+    renderSmallMultiples(filteredTargets, targetLatestValue, cfg);
+
+    window.addEventListener('resize', () => {
+        charts.main && charts.main.resize();
+        Object.values(charts.smallMultiples || {}).forEach(c => c.resize());
+    });
+}
+
+// 渲染小型多图网格
+function renderSmallMultiples(targets, latestValues, cfg) {
+    const grid = document.getElementById('smallMultiplesGrid');
+    grid.innerHTML = '';
+    charts.smallMultiples = charts.smallMultiples || {};
+
+    // 清理旧实例
+    Object.keys(charts.smallMultiples).forEach(k => {
+        if (!targets.includes(k)) {
+            charts.smallMultiples[k].dispose();
+            delete charts.smallMultiples[k];
+        }
+    });
+
+    // 按最新值降序排序
+    const sorted = targets.slice().sort((a, b) => (latestValues[b] || 0) - (latestValues[a] || 0));
+
+    for (const t of sorted) {
+        const card = document.createElement('div');
+        card.className = 'small-multiple';
+        const series = getTargetSeries(t, currentMetric);
+        const data = aggregateByPeriod(series, currentMainPeriod);
+        const validData = data.filter(d => d.value !== null);
+        const first = validData[0]?.value || 0;
+        const last = validData[validData.length - 1]?.value || 0;
+        const change = last - first;
+        const changePct = first !== 0 ? (change / first) * 100 : 0;
+        const changeColor = change > 0 ? '#e74c3c' : (change < 0 ? '#27ae60' : '#999');
+        const sign = change > 0 ? '+' : '';
+        const color = TARGET_COLORS[t] || '#999';
+
+        card.innerHTML = `
+            <div class="small-multiple-title">
+                <span style="color:${color}">● ${t}</span>
+                <span class="small-multiple-change" style="color:${changeColor}">${sign}${changePct.toFixed(2)}%</span>
+            </div>
+            <div class="small-multiple-chart" id="sm_${t.replace(/[^a-zA-Z0-9]/g, '_')}"></div>
+            <div style="font-size:10px;color:#8a9ab8;margin-top:2px;">
+                ${first.toFixed(0)} → ${last.toFixed(0)} ${cfg.unit}
+            </div>
+        `;
+        grid.appendChild(card);
+
+        // 用 nextTick 渲染（等 DOM 插入）
+        const chartId = `sm_${t.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        setTimeout(() => {
+            const dom = document.getElementById(chartId);
+            if (!dom) return;
+            if (charts.smallMultiples[t]) charts.smallMultiples[t].dispose();
+            const c = echarts.init(dom);
+            charts.smallMultiples[t] = c;
+            c.setOption({
+                grid: { left: 0, right: 0, top: 2, bottom: 0 },
+                xAxis: { type: 'category', show: false, data: data.map(d => d.date), boundaryGap: false },
+                yAxis: { type: 'value', show: false, scale: true },
+                tooltip: { show: false },
+                series: [{
+                    type: 'line',
+                    data: data.map(d => d.value),
+                    smooth: true,
+                    symbol: 'none',
+                    lineStyle: { width: 1.5, color: color },
+                    areaStyle: {
+                        color: {
+                            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                            colorStops: [
+                                { offset: 0, color: color + '66' },
+                                { offset: 1, color: color + '11' },
+                            ],
+                        },
+                    },
+                }],
+            });
+        }, 0);
+    }
 }
 
 // ============================================================
