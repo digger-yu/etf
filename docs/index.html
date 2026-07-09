@@ -116,6 +116,17 @@
         .chart-container { width: 100%; height: 420px; }
         .chart-container.tall { height: 500px; }
         .chart-container.short { height: 320px; }
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .chart-controls-inline .btn-group {
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        }
 
         /* 双栏布局 */
         .chart-grid {
@@ -277,30 +288,6 @@
                 <button class="btn" data-metric="shares">份额</button>
             </div>
         </div>
-        <div class="control-group">
-            <span class="control-label">时间粒度：</span>
-            <div class="btn-group" id="periodGroup">
-                <button class="btn active" data-period="day">按天</button>
-                <button class="btn" data-period="week">按周</button>
-                <button class="btn" data-period="month">按月</button>
-            </div>
-        </div>
-        <div class="control-group">
-            <span class="control-label">趋势对比：</span>
-            <div class="btn-group" id="trendModeGroup">
-                <button class="btn active" data-trend="absolute">绝对值</button>
-                <button class="btn" data-trend="normalized">归一化%</button>
-            </div>
-        </div>
-        <div class="control-group">
-            <span class="control-label">时间范围：</span>
-            <div class="btn-group" id="rangeGroup">
-                <button class="btn" data-range="30">近1月</button>
-                <button class="btn active" data-range="90">近3月</button>
-                <button class="btn" data-range="180">近半年</button>
-                <button class="btn" data-range="all">全部</button>
-            </div>
-        </div>
     </div>
 
     <!-- 分类筛选 -->
@@ -328,8 +315,19 @@
 
     <!-- 总趋势图（多线） -->
     <div id="mainChartSection" class="chart-section" style="display:none;">
-        <div class="chart-title" id="mainChartTitle"></div>
-        <div class="chart-subtitle" id="mainChartSubtitle"></div>
+        <div class="chart-header">
+            <div>
+                <div class="chart-title" id="mainChartTitle"></div>
+                <div class="chart-subtitle" id="mainChartSubtitle"></div>
+            </div>
+            <div class="chart-controls-inline">
+                <div class="btn-group" id="mainPeriodGroup">
+                    <button class="btn active" data-period="day">按天</button>
+                    <button class="btn" data-period="week">按周</button>
+                    <button class="btn" data-period="month">按月</button>
+                </div>
+            </div>
+        </div>
         <div class="chart-container" id="mainChart"></div>
     </div>
 
@@ -419,9 +417,8 @@ let dates = [];
 let targets = [];
 let currentCategory = "all";
 let currentMetric = "aum";
-let currentPeriod = "day";
-let currentRange = 90;
-let currentTrendMode = "absolute";  // 'absolute' | 'normalized'（归一化%=以起始日为100%）
+let currentPeriod = "day";      // 全局（用于瀑布图等）
+let currentMainPeriod = "day";  // 仅主图趋势对比使用
 let charts = {};
 let tableSortKey = 'cumulativeChange';
 let tableSortDir = 'desc';
@@ -437,8 +434,7 @@ const METRIC_CONFIG = {
 function getMetricConfig() { return METRIC_CONFIG[currentMetric]; }
 
 function getDateRange() {
-    if (currentRange === 'all' || dates.length <= currentRange) return dates;
-    return dates.slice(-currentRange);
+    return dates;  // 默认返回全部日期
 }
 
 function getFilteredTargets() {
@@ -542,29 +538,11 @@ function initControls() {
         });
     });
 
-    document.querySelectorAll('#periodGroup .btn').forEach(btn => {
+    document.querySelectorAll('#mainPeriodGroup .btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('#periodGroup .btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('#mainPeriodGroup .btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            currentPeriod = btn.dataset.period;
-            renderAll();
-        });
-    });
-
-    document.querySelectorAll('#rangeGroup .btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('#rangeGroup .btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentRange = btn.dataset.range === 'all' ? 'all' : parseInt(btn.dataset.range);
-            renderAll();
-        });
-    });
-
-    document.querySelectorAll('#trendModeGroup .btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('#trendModeGroup .btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentTrendMode = btn.dataset.trend;
+            currentMainPeriod = btn.dataset.period;
             renderMainChart();
         });
     });
@@ -621,9 +599,7 @@ function renderKPIs() {
     const netFlow = dailyInflow - dailyOutflow;
 
     // KPI 3: 期内累计变化
-    const periodLabel = currentRange === 'all' ? '全部时间' :
-        currentRange === 30 ? '近1月' :
-        currentRange === 90 ? '近3月' : '近半年';
+    const periodLabel = '全部时间';
     const periodStart = range[0];
     const periodEnd = range[range.length-1];
 
@@ -766,7 +742,7 @@ function renderFlowRanking() {
 }
 
 // ============================================================
-// 总趋势图（支持绝对值/归一化两种模式）
+// 总趋势图
 // ============================================================
 function renderMainChart() {
     if (charts.main) charts.main.dispose();
@@ -777,32 +753,19 @@ function renderMainChart() {
     const cfg = getMetricConfig();
 
     document.getElementById('mainChartTitle').textContent = `${cfg.label}趋势对比`;
-    const modeLabel = currentTrendMode === 'normalized' ? '归一化 (起始日=100%)' : '绝对值';
     document.getElementById('mainChartSubtitle').textContent =
-        `${currentPeriod === 'day' ? '按天' : (currentPeriod === 'week' ? '按周' : '按月')} | 范围: ${range[0]} ~ ${range[range.length-1]} | 模式: ${modeLabel} | 共 ${filteredTargets.length} 个标的`;
+        `${currentMainPeriod === 'day' ? '按天' : (currentMainPeriod === 'week' ? '按周' : '按月')} | 全部时间: ${range[0]} ~ ${range[range.length-1]} | 共 ${filteredTargets.length} 个标的`;
 
     const series = filteredTargets.map(t => {
-        const raw = aggregateByPeriod(getTargetSeries(t, currentMetric), currentPeriod);
-        let data;
-        if (currentTrendMode === 'normalized') {
-            // 归一化：起始日为 100
-            const first = raw.length > 0 ? raw[0].value : null;
-            if (first && first !== 0) {
-                data = raw.map(d => first !== 0 ? round((d.value / first) * 100, 4) : null);
-            } else {
-                data = raw.map(() => null);
-            }
-        } else {
-            data = raw.map(d => d.value);
-        }
+        const data = aggregateByPeriod(getTargetSeries(t, currentMetric), currentMainPeriod);
         return {
             name: t,
             type: 'line',
             smooth: true,
             symbol: 'none',
-            data,
+            data: data.map(d => d.value),
             itemStyle: { color: TARGET_COLORS[t] || '#999' },
-            lineStyle: { width: 1.5 },
+            lineStyle: { width: 1.8 },
             emphasis: { focus: 'series', lineStyle: { width: 3 } },
         };
     });
@@ -810,14 +773,9 @@ function renderMainChart() {
     // X 轴数据
     let xData = [];
     if (filteredTargets.length > 0) {
-        const data = aggregateByPeriod(getTargetSeries(filteredTargets[0], currentMetric), currentPeriod);
+        const data = aggregateByPeriod(getTargetSeries(filteredTargets[0], currentMetric), currentMainPeriod);
         xData = data.map(d => d.date);
     }
-
-    const yAxisName = currentTrendMode === 'normalized' ? '起始日=100%' : cfg.yAxisName;
-    const yAxisFormatter = currentTrendMode === 'normalized'
-        ? v => v.toFixed(0) + '%'
-        : v => v.toFixed(0);
 
     charts.main.setOption({
         tooltip: {
@@ -826,10 +784,7 @@ function renderMainChart() {
                 let html = `<b>${params[0].axisValue}</b><br>`;
                 params.slice(0, 10).forEach(p => {  // 限制显示前10个
                     if (p.value !== null && p.value !== undefined) {
-                        const displayVal = currentTrendMode === 'normalized'
-                            ? p.value.toFixed(2) + '%'
-                            : p.value.toFixed(2) + ' ' + cfg.unit;
-                        html += `${p.marker} ${p.seriesName}: ${displayVal}<br>`;
+                        html += `${p.marker} ${p.seriesName}: ${p.value.toFixed(2)} ${cfg.unit}<br>`;
                     }
                 });
                 if (params.length > 10) html += `... 等共 ${params.length} 个标的`;
@@ -850,13 +805,14 @@ function renderMainChart() {
         },
         yAxis: {
             type: 'value',
-            name: yAxisName,
+            name: cfg.yAxisName,
             nameTextStyle: { fontSize: 11 },
-            axisLabel: { fontSize: 10, formatter: yAxisFormatter },
+            axisLabel: { fontSize: 10 },
+            scale: true,  // 不强制从0开始，能更明显看到变化
         },
         dataZoom: [
-            { type: 'inside', start: 70, end: 100 },
-            { type: 'slider', start: 70, end: 100, height: 18, bottom: 35 },
+            { type: 'inside' },
+            { type: 'slider', height: 18, bottom: 25 },
         ],
         series,
     }, true);
