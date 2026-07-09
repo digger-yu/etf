@@ -374,6 +374,11 @@ const TARGET_CATEGORIES = {
     "机器人": ["机器人"],
 };
 
+// 数据限制说明：哪些标的的份额数据非真实历史
+const TARGET_DATA_NOTES = {
+    "白银": "份额数据源限制：白银LOF(161226)不在交易所ETF份额日报中，本项目仅用历史净值反映白银价格波动（份额/AUM为估算值）",
+};
+
 const TARGET_COLORS = {
     "上证50": "#e74c3c",
     "沪深300": "#c0392b",
@@ -1061,9 +1066,10 @@ function renderTable() {
         const pctSign = v => v > 0 ? '+' : '';
         const color = TARGET_COLORS[s.target] || '#333';
 
+        const note = TARGET_DATA_NOTES[s.target];
         tr.innerHTML = `
             <td class="target-name">
-                <span class="color-dot" style="background:${color}"></span>${s.target}
+                <span class="color-dot" style="background:${color}"></span>${s.target}${note ? ' <span title="'+note+'" style="cursor:help;color:#999;font-size:10px;">ⓘ</span>' : ''}
             </td>
             <td><b>${s.latest.toFixed(4)}</b></td>
             <td class="${upDown(s.lastChange)}">${s.lastChange !== null ? sign(s.lastChange) + s.lastChange.toFixed(4) : '--'}</td>
