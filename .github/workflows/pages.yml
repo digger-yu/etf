@@ -1,0 +1,47 @@
+name: 部署 GitHub Pages
+
+# 触发条件：main 分支任何 push 都重新部署（覆盖数据更新 / 文档修改 / 配置变更等场景）
+# 同时支持 workflow_dispatch 手动触发，便于回滚 / 验证
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# 部署 Pages 必需的最小权限集：
+#   contents: read  检出代码
+#   pages: write    写入 Pages 部署目标
+#   id-token: write 签发 OIDC token 给 deploy-pages@v4 用于上传到 Pages CDN
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 并发控制：同一 group 内的运行串行执行，避免多次部署互相覆盖；
+# cancel-in-progress 设为 false，正在部署的不会被新触发取消
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: 构建并部署
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Pages
+        uses: actions/configure-pages@v5
+
+      - name: 上传静态资源（docs/ 目录作为站点根）
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
