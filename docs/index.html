@@ -750,10 +750,16 @@ function renderFlowRanking() {
         },
         series: [{
             type: 'bar',
-            data: values.slice().reverse().map((v, i) => ({
-                value: v,
-                itemStyle: { color: v > 0 ? '#e74c3c' : (v < 0 ? '#27ae60' : '#999') }
-            })),
+            data: values.slice().reverse().map((v, i, arr) => {
+                // 根据反转后位置反查 cumulative 原始条目
+                const originalIdx = arr.length - 1 - i;
+                const rawChange = cumulative[originalIdx].rawChange;
+                // 颜色按原始 change 符号判断（更稳健）
+                return {
+                    value: v,
+                    itemStyle: { color: rawChange > 0 ? '#e74c3c' : (rawChange < 0 ? '#27ae60' : '#999') }
+                };
+            }),
             barMaxWidth: 18,
             label: {
                 show: true,
