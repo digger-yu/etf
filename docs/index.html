@@ -1093,10 +1093,8 @@ function renderHeatmapChart(filteredTargets, targetLatestValue, cfg) {
     // 是否显示数值标签
     const showLabels = heatData.length <= 800;
 
-    // 颜色档
-    const colorRange = isPct
-        ? ['#f5f5f5', '#fde0c5', '#fab68a', '#f47b55', '#d8392c', '#a50026']  // 灰→黄→红
-        : ['#fff7ec', '#fee8c8', '#fdd49e', '#fdbb84', '#fc8d59', '#d7301f', '#7f0000'];  // 浅黄→深红
+    // 颜色档：占比与绝对值统一使用同一套"浅黄→深红"渐变，确保视觉一致
+    const colorRange = ['#fff7ec', '#fee8c8', '#fdd49e', '#fdbb84', '#fc8d59', '#d7301f', '#7f0000'];
 
     charts.heatmap.setOption({
         tooltip: {
