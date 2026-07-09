@@ -264,9 +264,10 @@ def get_representative_etf_code(target: str) -> str | None:
     return target_to_code.get(target)
 
 
-def fetch_target_nav(target: str) -> float | None:
+def fetch_target_nav(target: str, date_str: str = None) -> float | None:
     """
-    获取指定标的代表ETF的最新单位净值。
+    获取指定标的代表ETF的单位净值。
+    date_str: YYYY-MM-DD 格式；若指定，则返回该日期的NAV；否则返回最新NAV。
     返回单位净值（元），失败返回 None。
     """
     code = get_representative_etf_code(target)
@@ -275,7 +276,13 @@ def fetch_target_nav(target: str) -> float | None:
     try:
         df = ak.fund_etf_fund_info_em(fund=code)
         if df is not None and len(df) > 0 and "单位净值" in df.columns:
-            return float(df["单位净值"].iloc[-1])
+            if date_str is None:
+                return float(df["单位净值"].iloc[-1])
+            # 查找指定日期
+            df["净值日期"] = df["净值日期"].astype(str)
+            row = df[df["净值日期"] == date_str]
+            if len(row) > 0:
+                return float(row["单位净值"].iloc[0])
     except Exception as e:
         print(f"[warn] 获取 {target}({code}) 净值失败: {e}")
     return None
@@ -403,12 +410,15 @@ def fetch_daily_data(date_str: str = None) -> dict:
     # 按标的汇总份额
     aggregated = aggregate_by_target(combined_df)
 
-    # 转换为亿份并附加净值
+    # 转换日期格式为 YYYY-MM-DD
+    iso_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+
+    # 转换为亿份并附加净值（使用该日期的NAV）
     result = {}
     for target, shares in aggregated.items():
         shares_yi = shares_to_yi(shares)
-        # 获取该标的代表ETF的单位净值
-        nav = fetch_target_nav(target)
+        # 获取该标的代表ETF在指定日期的净值（而非最新值）
+        nav = fetch_target_nav(target, date_str=iso_date)
         result[target] = {
             "shares": shares_yi,
             "nav": round(nav, 4) if nav is not None else None,
@@ -421,7 +431,7 @@ def fetch_daily_data(date_str: str = None) -> dict:
     code = get_representative_etf_code("白银")
     if "白银" not in result:
         aum = fetch_target_latest_aum("白银")
-        nav = fetch_target_nav("白银")
+        nav = fetch_target_nav("白银", date_str=iso_date)
         if aum is not None and nav is not None and nav != 0:
             shares_yi = round(aum / nav, 4)
             result["白银"] = {

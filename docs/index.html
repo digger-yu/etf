@@ -309,7 +309,7 @@
 
     <!-- 累计净流入排行（瀑布图替代） -->
     <div id="flowSection" class="chart-section" style="display:none;">
-        <div class="chart-title">
+        <div class="chart-title" id="flowTitle">
             累计净流入排行
             <span class="legend-info">
                 <span class="up">▲ 流入(申购)</span>
@@ -654,10 +654,26 @@ function renderFlowRanking() {
         const startVal = start[currentMetric];
         const endVal = end[currentMetric];
         if (startVal === null || endVal === null) continue;
-        cumulative.push({ target: t, change: endVal - startVal, startVal, endVal });
+        // 净值单位下用变化率%更直观
+        const change = endVal - startVal;
+        const changePct = startVal !== 0 ? (change / startVal) * 100 : 0;
+        const displayValue = currentMetric === 'nav' ? changePct : change;
+        cumulative.push({ target: t, change: displayValue, rawChange: change, startVal, endVal, changePct });
     }
     cumulative.sort((a, b) => b.change - a.change);
 
+    // 标题根据指标切换文案
+    let flowTitle = '累计净流入排行';
+    let flowLabel = `累计变化(${cfg.unit})`;
+    if (currentMetric === 'nav') {
+        flowTitle = '累计净值涨幅排行';
+        flowLabel = '累计涨跌幅(%)';
+    } else if (currentMetric === 'shares') {
+        flowTitle = '累计份额变化排行';
+    } else {
+        flowTitle = '累计资产规模变化排行';
+    }
+    document.getElementById('flowTitle').textContent = flowTitle;
     document.getElementById('flowSubtitle').textContent =
         `区间: ${range[0]} ~ ${range[range.length-1]} | 指标: ${cfg.label} | 共 ${cumulative.length} 个标的`;
 
@@ -673,17 +689,25 @@ function renderFlowRanking() {
                 const idx = params[0].dataIndex;
                 const c = cumulative[idx];
                 const sign = c.change > 0 ? '+' : '';
+                const colorMain = c.change > 0 ? '#e74c3c' : '#27ae60';
+                let valueLine, changeLine;
+                if (currentMetric === 'nav') {
+                    valueLine = `<b style="color:${colorMain}">${sign}${c.change.toFixed(2)}%</b>`;
+                    changeLine = `${c.startVal.toFixed(4)} → ${c.endVal.toFixed(4)} 元`;
+                } else {
+                    valueLine = `<b style="color:${colorMain}">${sign}${c.change.toFixed(2)} ${cfg.unit}</b>`;
+                    changeLine = `${c.startVal.toFixed(2)} → ${c.endVal.toFixed(2)} ${cfg.unit}`;
+                }
                 return `<b>${c.target}</b><br>
-                    期初: ${c.startVal.toFixed(2)} ${cfg.unit}<br>
-                    期末: ${c.endVal.toFixed(2)} ${cfg.unit}<br>
-                    累计变化: <b style="color:${c.change > 0 ? '#e74c3c' : '#27ae60'}">${sign}${c.change.toFixed(2)} ${cfg.unit}</b><br>
-                    变化率: ${sign}${((c.change / c.startVal) * 100).toFixed(2)}%`;
+                    区间: ${changeLine}<br>
+                    累计变化: ${valueLine}<br>
+                    变化率: ${sign}${c.changePct.toFixed(2)}%`;
             }
         },
         grid: { left: 90, right: 30, top: 20, bottom: 30 },
         xAxis: {
             type: 'value',
-            name: `累计变化(${cfg.unit})`,
+            name: flowLabel,
             nameTextStyle: { fontSize: 11 },
             axisLabel: { fontSize: 10 },
         },
