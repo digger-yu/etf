@@ -173,15 +173,35 @@ def backfill_all(start_date: str, end_date: str, filepath: str = None):
             else:
                 data["records"][date_key][target] = {"shares": shares, "nav": None, "aum": None}
 
+    # 收集所有标的
+    all_targets = set()
+    for date_data in data["records"].values():
+        all_targets.update(date_data.keys())
+
+    # 回填每个标的的净值（从最近一天开始，向前填充）
+    # 注：akshare 的 fund_etf_fund_info_em 只能获取最新净值，无法获取历史净值
+    # 所以这里用最新净值回填所有历史日期（注意：这会有偏差，但仍是合理估算）
+    print(f"\n回填 {len(all_targets)} 个标的的单位净值...")
+    target_navs = {}
+    for target in sorted(all_targets):
+        nav = fetch_target_nav(target)
+        if nav is not None:
+            target_navs[target] = round(nav, 4)
+            print(f"  {target}: {round(nav, 4)}")
+
+    for date_key, date_data in data["records"].items():
+        for target, rec in date_data.items():
+            if target in target_navs and rec.get("nav") is None:
+                rec["nav"] = target_navs[target]
+                if rec.get("shares") is not None:
+                    rec["aum"] = round(rec["shares"] * target_navs[target], 2)
+
     # 按日期排序
     sorted_records = dict(sorted(data["records"].items()))
     data["records"] = sorted_records
     data["last_update"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     total_dates = len(data["records"])
-    all_targets = set()
-    for date_data in data["records"].values():
-        all_targets.update(date_data.keys())
 
     print(f"\n回填完成！")
     print(f"  总日期数: {total_dates}")

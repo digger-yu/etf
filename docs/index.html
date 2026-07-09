@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ETF 份额追踪 - 宽基ETF每日份额增减变化趋势</title>
+    <title>ETF 资金流向追踪 - 宽基ETF份额与资产规模变化</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -23,12 +23,36 @@
         .header p { font-size: 14px; color: #aab8c8; }
         .header .update-time { font-size: 12px; color: #8a9ab8; margin-top: 4px; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        /* KPI 卡片 */
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .kpi-card {
+            background: #fff;
+            padding: 18px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border-left: 4px solid #3498db;
+        }
+        .kpi-card.up { border-left-color: #e74c3c; }
+        .kpi-card.down { border-left-color: #27ae60; }
+        .kpi-card .label { font-size: 12px; color: #8a9ab8; margin-bottom: 6px; }
+        .kpi-card .value { font-size: 22px; font-weight: 700; color: #1a2332; }
+        .kpi-card .change { font-size: 12px; margin-top: 4px; }
+        .kpi-card .change.up { color: #e74c3c; }
+        .kpi-card .change.down { color: #27ae60; }
+
+        /* 控制面板 */
         .control-panel {
             background: #fff;
             border-radius: 8px;
             padding: 16px 20px;
             margin-bottom: 20px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
             display: flex;
             flex-wrap: wrap;
             gap: 16px;
@@ -66,34 +90,91 @@
             background: #1a2332;
             color: #fff;
         }
-        .summary-section { margin-bottom: 30px; }
-        .summary-table {
-            width: 100%;
-            border-collapse: collapse;
+
+        /* 图表容器 */
+        .chart-section {
             background: #fff;
             border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            padding: 20px;
+            margin-bottom: 20px;
         }
-        .summary-table th {
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #1a2332;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chart-subtitle {
+            font-size: 12px;
+            color: #8a9ab8;
+            margin-bottom: 16px;
+        }
+        .chart-container { width: 100%; height: 420px; }
+        .chart-container.tall { height: 500px; }
+        .chart-container.short { height: 320px; }
+
+        /* 双栏布局 */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(680px, 1fr));
+            gap: 20px;
+        }
+        .chart-card {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            padding: 16px;
+        }
+
+        /* 数据表 */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .data-table th {
             background: #e8edf3;
             color: #1a2332;
             font-weight: 600;
-            padding: 12px 16px;
+            padding: 10px 8px;
             text-align: center;
-            font-size: 13px;
+            position: sticky;
+            top: 0;
+            z-index: 1;
         }
-        .summary-table td {
-            padding: 10px 16px;
+        .data-table td {
+            padding: 8px;
             text-align: center;
-            font-size: 13px;
             border-bottom: 1px solid #eee;
         }
-        .summary-table tr:last-child td { border-bottom: none; }
-        .summary-table tr:hover { background: #f8f9fa; }
-        .change-up { color: #e74c3c; font-weight: 600; } /* 涨=红 */
-        .change-down { color: #27ae60; font-weight: 600; } /* 跌=绿 */
-        .shares-val { font-weight: 500; }
+        .data-table tr:hover { background: #f8f9fa; }
+        .data-table .sparkline-cell {
+            padding: 0 !important;
+            width: 140px;
+            height: 40px;
+        }
+        .data-table .target-name {
+            font-weight: 600;
+            text-align: left;
+            padding-left: 12px;
+        }
+        .data-table .target-name .color-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .change-up { color: #e74c3c; font-weight: 600; }
+        .change-down { color: #27ae60; font-weight: 600; }
+        .change-neutral { color: #8a9ab8; }
+
+        /* 分类标签 */
         .category-tabs {
             display: flex;
             gap: 8px;
@@ -116,62 +197,8 @@
             color: #fff;
             border-color: #1a2332;
         }
-        .chart-section {
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        .chart-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 16px;
-            color: #1a2332;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .chart-title .subtitle {
-            font-size: 12px;
-            color: #8a9ab8;
-            font-weight: normal;
-        }
-        .chart-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(680px, 1fr));
-            gap: 20px;
-        }
-        .chart-card {
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-            padding: 16px;
-        }
-        .chart-card h3 {
-            font-size: 14px;
-            color: #1a2332;
-            margin-bottom: 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .chart-card h3 .badge {
-            font-size: 11px;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-weight: normal;
-        }
-        .badge-up { background: #fde8e8; color: #e74c3c; }
-        .badge-down { background: #e8f8e8; color: #27ae60; }
-        .badge-neutral { background: #e8edf3; color: #666; }
-        .chart-container { width: 100%; height: 400px; }
-        .footer {
-            text-align: center;
-            padding: 30px 20px;
-            color: #8a9ab8;
-            font-size: 12px;
-        }
+
+        /* 加载 & 错误 */
         .loading {
             text-align: center;
             padding: 60px 20px;
@@ -197,31 +224,37 @@
             margin-bottom: 20px;
             text-align: center;
         }
-        .data-source-tag {
-            display: inline-block;
-            background: #e8edf3;
-            color: #666;
-            padding: 2px 8px;
-            border-radius: 10px;
+
+        .footer {
+            text-align: center;
+            padding: 30px 20px;
+            color: #8a9ab8;
+            font-size: 12px;
+        }
+        .legend-info {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
             font-size: 11px;
+            color: #8a9ab8;
             margin-left: 8px;
         }
+        .legend-info .up { color: #e74c3c; }
+        .legend-info .down { color: #27ae60; }
 
         @media (max-width: 768px) {
             .header h1 { font-size: 20px; }
-            .chart-grid { grid-template-columns: 1fr; }
-            .chart-container { height: 300px; }
-            .summary-table { font-size: 11px; }
-            .summary-table th, .summary-table td { padding: 6px 8px; }
-            .control-panel { flex-direction: column; align-items: flex-start; }
+            .chart-container, .chart-container.tall { height: 300px; }
+            .data-table { font-size: 11px; }
+            .data-table th, .data-table td { padding: 4px; }
         }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <h1>ETF 份额追踪</h1>
-    <p>宽基ETF每日份额增减变化趋势 | 数据来源：上交所 & 深交所 ETF份额日报</p>
+    <h1>📊 ETF 资金流向追踪</h1>
+    <p>宽基ETF每日份额与资产规模变化 | 透视"国家队"持仓动向</p>
     <div class="update-time" id="updateTime">加载中...</div>
 </div>
 
@@ -232,14 +265,17 @@
     </div>
     <div id="errorArea" class="error-msg" style="display:none;"></div>
 
-    <!-- 顶部控制面板 -->
+    <!-- 顶部 KPI 卡片 -->
+    <div id="kpiRow" class="kpi-row" style="display:none;"></div>
+
+    <!-- 控制面板 -->
     <div id="controlPanel" class="control-panel" style="display:none;">
         <div class="control-group">
             <span class="control-label">指标：</span>
             <div class="btn-group" id="metricGroup">
-                <button class="btn active" data-metric="shares">份额</button>
+                <button class="btn active" data-metric="aum">资产规模</button>
+                <button class="btn" data-metric="shares">份额</button>
                 <button class="btn" data-metric="nav">单位净值</button>
-                <button class="btn" data-metric="aum">资产规模</button>
             </div>
         </div>
         <div class="control-group">
@@ -261,27 +297,6 @@
         </div>
     </div>
 
-    <!-- 概览汇总表 -->
-    <div id="summarySection" class="summary-section" style="display:none;">
-        <div class="chart-title">
-            最新数据概览
-            <span class="subtitle" id="summarySubtitle"></span>
-        </div>
-        <table class="summary-table" id="summaryTable">
-            <thead>
-                <tr>
-                    <th>标的</th>
-                    <th id="colMetric">最新份额(亿份)</th>
-                    <th>日变化</th>
-                    <th>日变化率</th>
-                    <th>周变化</th>
-                    <th>月变化</th>
-                </tr>
-            </thead>
-            <tbody id="summaryBody"></tbody>
-        </table>
-    </div>
-
     <!-- 分类筛选 -->
     <div id="categoryArea" class="category-tabs" style="display:none;">
         <div class="category-tab active" data-category="all">全部</div>
@@ -291,31 +306,52 @@
         <div class="category-tab" data-category="行业">行业主题</div>
     </div>
 
-    <!-- 总趋势图 -->
-    <div id="mainChartSection" class="chart-section" style="display:none;">
+    <!-- 累计净流入排行（瀑布图替代） -->
+    <div id="flowSection" class="chart-section" style="display:none;">
         <div class="chart-title">
-            趋势对比图
-            <span class="subtitle" id="mainChartSubtitle"></span>
+            累计净流入排行
+            <span class="legend-info">
+                <span class="up">▲ 流入(申购)</span>
+                <span class="down">▼ 流出(赎回)</span>
+            </span>
         </div>
+        <div class="chart-subtitle" id="flowSubtitle"></div>
+        <div class="chart-container" id="flowChart"></div>
+    </div>
+
+    <!-- 总趋势图（多线） -->
+    <div id="mainChartSection" class="chart-section" style="display:none;">
+        <div class="chart-title" id="mainChartTitle"></div>
+        <div class="chart-subtitle" id="mainChartSubtitle"></div>
         <div class="chart-container" id="mainChart"></div>
     </div>
 
-    <!-- 日变化柱状图 -->
-    <div id="dailyChangeSection" class="chart-section" style="display:none;">
-        <div class="chart-title">
-            变化量对比
-            <span class="subtitle" id="changeChartSubtitle"></span>
-        </div>
-        <div class="chart-container" id="dailyChangeChart"></div>
+    <!-- 每日变化热力图 -->
+    <div id="heatmapSection" class="chart-section" style="display:none;">
+        <div class="chart-title">每日变化热力图</div>
+        <div class="chart-subtitle">颜色越红代表当日流入越多，颜色越绿代表流出越多。空白为非交易日。</div>
+        <div class="chart-container tall" id="heatmapChart"></div>
     </div>
 
-    <!-- 各标的详细图表 -->
+    <!-- 详细数据表（带 Sparkline） -->
+    <div id="tableSection" class="chart-section" style="display:none;">
+        <div class="chart-title">详细数据表（点击列名排序）</div>
+        <div class="chart-subtitle">每行包含该标的的迷你趋势图(Sparkline)，便于一眼看出资金流向</div>
+        <div style="overflow-x:auto; max-height:600px; overflow-y:auto;">
+            <table class="data-table" id="dataTable">
+                <thead id="tableHead"></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 各标的详细图 -->
     <div id="detailSection" class="chart-grid" style="display:none;"></div>
 </div>
 
 <div class="footer">
-    数据来源：上海证券交易所 & 深圳证券交易所 ETF份额日报 | 每日 16:40 (北京时间) 自动更新<br>
-    同一标的不同基金公司的ETF份额已合并求和 | <span class="data-source-tag">份额=资金流向(申购赎回)</span><span class="data-source-tag">净值=资产价格</span>
+    数据来源：上海证券交易所 & 深圳证券交易所 ETF份额日报 + 东方财富 单位净值 | 每日 16:40 (北京时间) 自动更新<br>
+    同一标的不同基金公司的ETF份额已合并求和 | 涨=红 跌=绿（中国股市惯例） | 仅供研究参考
 </div>
 
 <script>
@@ -352,17 +388,91 @@ const TARGET_COLORS = {
     "芯片": "#009688",
 };
 
+// 标的分类中文名
+const CATEGORY_LABEL = {
+    "all": "全部标的",
+    "宽基": "宽基指数",
+    "科创": "科创系列",
+    "商品": "商品ETF",
+    "行业": "行业主题",
+};
+
 // ============================================================
-// 状态管理
+// 状态
 // ============================================================
 let rawData = null;
 let dates = [];
 let targets = [];
 let currentCategory = "all";
-let currentMetric = "shares";  // shares | nav | aum
-let currentPeriod = "day";      // day | week | month
-let currentRange = 90;          // 数据范围（天数），'all' 表示全部
-let charts = {};                // 缓存 chart 实例
+let currentMetric = "aum";
+let currentPeriod = "day";
+let currentRange = 90;
+let charts = {};
+let tableSortKey = 'cumulativeChange';
+let tableSortDir = 'desc';
+
+// ============================================================
+// 工具
+// ============================================================
+const METRIC_CONFIG = {
+    shares: { label: '份额', unit: '亿份', yAxisName: '亿份', short: '份额' },
+    nav:    { label: '单位净值', unit: '元',  yAxisName: '元', short: '净值' },
+    aum:    { label: '资产规模', unit: '亿元', yAxisName: '亿元', short: 'AUM' },
+};
+
+function getMetricConfig() { return METRIC_CONFIG[currentMetric]; }
+
+function getDateRange() {
+    if (currentRange === 'all' || dates.length <= currentRange) return dates;
+    return dates.slice(-currentRange);
+}
+
+function getFilteredTargets() {
+    if (currentCategory === "all") return targets;
+    const catTargets = TARGET_CATEGORIES[currentCategory] || [];
+    return targets.filter(t => catTargets.includes(t));
+}
+
+// 获取标的时序数据
+function getTargetSeries(targetName, metric = 'aum') {
+    const result = [];
+    const range = getDateRange();
+    for (let i = 0; i < range.length; i++) {
+        const d = range[i];
+        const info = rawData.records[d][targetName];
+        const value = info ? info[metric] : null;
+        let prevValue = null;
+        if (i > 0) {
+            const prevInfo = rawData.records[range[i-1]][targetName];
+            if (prevInfo) prevValue = prevInfo[metric];
+        }
+        const change = (value !== null && prevValue !== null) ? value - prevValue : null;
+        const changePct = (value !== null && prevValue !== null && prevValue !== 0)
+            ? (change / prevValue * 100) : null;
+        result.push({ date: d, value, change, changePct });
+    }
+    return result;
+}
+
+// 按周/月聚合（取最后一个交易日的数据）
+function aggregateByPeriod(data, period) {
+    if (period === 'day') return data;
+    const groups = {};
+    for (const item of data) {
+        let key;
+        if (period === 'week') {
+            const dt = new Date(item.date);
+            const day = dt.getDay();
+            const diff = dt.getDate() - day + (day === 0 ? -6 : 1);
+            const monday = new Date(dt.setDate(diff));
+            key = monday.toISOString().slice(0, 10);
+        } else if (period === 'month') {
+            key = item.date.slice(0, 7);
+        }
+        if (!groups[key] || item.date > groups[key].date) groups[key] = item;
+    }
+    return Object.values(groups).sort((a, b) => a.date.localeCompare(b.date));
+}
 
 // ============================================================
 // 数据加载
@@ -380,7 +490,7 @@ async function loadData() {
         document.getElementById('loadingArea').style.display = 'none';
         const errEl = document.getElementById('errorArea');
         errEl.style.display = 'block';
-        errEl.textContent = '数据加载失败: ' + e.message + '。请确保数据文件 docs/data/etf_shares.json 存在。';
+        errEl.textContent = '数据加载失败: ' + e.message + '。请确保 docs/data/etf_shares.json 存在。';
     }
 }
 
@@ -397,8 +507,8 @@ function processData() {
 }
 
 function showUI() {
-    ['controlPanel', 'summarySection', 'categoryArea', 'mainChartSection',
-     'dailyChangeSection', 'detailSection'].forEach(id => {
+    ['kpiRow', 'controlPanel', 'categoryArea', 'flowSection', 'mainChartSection',
+     'heatmapSection', 'tableSection', 'detailSection'].forEach(id => {
         document.getElementById(id).style.display = '';
     });
     document.getElementById('updateTime').textContent = '最后更新: ' + (rawData.last_update || '未知');
@@ -406,87 +516,9 @@ function showUI() {
 }
 
 // ============================================================
-// 数据处理工具
-// ============================================================
-
-// 获取指定标的的时序数据 [{date, value, change, changePct}]
-function getTargetSeries(targetName, metric = 'shares') {
-    const result = [];
-    const range = getDateRange();
-    for (const d of range) {
-        const info = rawData.records[d][targetName];
-        const idx = range.indexOf(d);
-        if (!info) {
-            result.push({ date: d, value: null, change: null, changePct: null });
-            continue;
-        }
-        const value = info[metric];
-        let prevValue = null;
-        if (idx > 0) {
-            const prevInfo = rawData.records[range[idx-1]][targetName];
-            if (prevInfo) prevValue = prevInfo[metric];
-        }
-        const change = (value !== null && prevValue !== null) ? value - prevValue : null;
-        const changePct = (value !== null && prevValue !== null && prevValue !== 0)
-            ? (change / prevValue * 100) : null;
-        result.push({ date: d, value, change, changePct });
-    }
-    return result;
-}
-
-// 按周/月聚合
-function aggregateByPeriod(data, period) {
-    if (period === 'day') return data;
-
-    const groups = {};
-    for (const item of data) {
-        let key;
-        if (period === 'week') {
-            // 每周一为分界
-            const dt = new Date(item.date);
-            const day = dt.getDay();
-            const diff = dt.getDate() - day + (day === 0 ? -6 : 1);
-            const monday = new Date(dt.setDate(diff));
-            key = monday.toISOString().slice(0, 10);
-        } else if (period === 'month') {
-            key = item.date.slice(0, 7); // YYYY-MM
-        }
-        if (!groups[key]) groups[key] = item;
-        // 取每周/月的最后一天
-        else if (item.date > groups[key].date) groups[key] = item;
-    }
-    return Object.values(groups).sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function getDateRange() {
-    if (currentRange === 'all' || dates.length <= currentRange) return dates;
-    return dates.slice(-currentRange);
-}
-
-function getFilteredTargets() {
-    if (currentCategory === "all") return targets;
-    const catTargets = TARGET_CATEGORIES[currentCategory] || [];
-    return targets.filter(t => catTargets.includes(t));
-}
-
-// ============================================================
-// 配置/单位
-// ============================================================
-const METRIC_CONFIG = {
-    shares: { label: '份额', unit: '亿份', yAxisName: '亿份' },
-    nav:    { label: '单位净值', unit: '元',  yAxisName: '元' },
-    aum:    { label: '资产规模', unit: '亿元', yAxisName: '亿元' },
-};
-
-function getMetricConfig() {
-    return METRIC_CONFIG[currentMetric] || METRIC_CONFIG.shares;
-}
-
-// ============================================================
-// 控件初始化
+// 控件
 // ============================================================
 function initControls() {
-    // 指标切换
     document.querySelectorAll('#metricGroup .btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('#metricGroup .btn').forEach(b => b.classList.remove('active'));
@@ -496,7 +528,6 @@ function initControls() {
         });
     });
 
-    // 时间粒度切换
     document.querySelectorAll('#periodGroup .btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('#periodGroup .btn').forEach(b => b.classList.remove('active'));
@@ -506,7 +537,6 @@ function initControls() {
         });
     });
 
-    // 时间范围切换
     document.querySelectorAll('#rangeGroup .btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('#rangeGroup .btn').forEach(b => b.classList.remove('active'));
@@ -516,77 +546,183 @@ function initControls() {
         });
     });
 
-    // 分类切换
     document.querySelectorAll('.category-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             currentCategory = tab.dataset.category;
-            renderMainChart();
-            renderDailyChangeChart();
-            renderDetailCharts();
+            renderAll();
         });
     });
 }
 
 // ============================================================
-// 渲染：概览表
+// KPI 卡片
 // ============================================================
-function renderAll() {
-    renderSummary();
-    renderMainChart();
-    renderDailyChangeChart();
-    renderDetailCharts();
-}
+function renderKPIs() {
+    const row = document.getElementById('kpiRow');
+    row.innerHTML = '';
 
-function renderSummary() {
-    const tbody = document.getElementById('summaryBody');
-    tbody.innerHTML = '';
+    const range = getDateRange();
+    const filteredTargets = getFilteredTargets();
     const cfg = getMetricConfig();
 
-    // 概览表只展示最新一天的数据，不受粒度/范围影响
-    const latestDate = dates[dates.length - 1];
-    const prevDate = dates.length > 1 ? dates[dates.length - 2] : null;
-    const weekDate = dates.length > 5 ? dates[dates.length - 6] : null;
-    const monthDate = dates.length > 22 ? dates[dates.length - 23] : null;
-
-    // 更新表头
-    document.getElementById('colMetric').textContent = `最新${cfg.label}(${cfg.unit})`;
-    document.getElementById('summarySubtitle').textContent = `截至 ${latestDate}`;
-
-    for (const t of targets) {
-        const latest = rawData.records[latestDate][t];
-        if (!latest) continue;
-        const latestVal = latest[currentMetric];
-
-        const prev = prevDate ? rawData.records[prevDate][t] : null;
-        const week = weekDate ? rawData.records[weekDate][t] : null;
-        const month = monthDate ? rawData.records[monthDate][t] : null;
-
-        const dayChg = (latestVal !== null && prev) ? latestVal - prev[currentMetric] : null;
-        const dayPct = (dayChg !== null && prev && prev[currentMetric] !== 0)
-            ? (dayChg / prev[currentMetric] * 100) : null;
-        const weekChg = (latestVal !== null && week) ? latestVal - week[currentMetric] : null;
-        const monthChg = (latestVal !== null && month) ? latestVal - month[currentMetric] : null;
-
-        const tr = document.createElement('tr');
-        const upDownClass = v => v > 0 ? 'change-up' : (v < 0 ? 'change-down' : '');
-        const sign = v => v > 0 ? '+' : '';
-
-        tr.innerHTML = `
-            <td style="font-weight:600;color:${TARGET_COLORS[t] || '#333'}">${t}</td>
-            <td class="shares-val">${latestVal !== null ? latestVal.toFixed(4) : '--'}</td>
-            <td class="${upDownClass(dayChg)}">${dayChg !== null ? sign(dayChg) + dayChg.toFixed(4) : '--'}</td>
-            <td class="${upDownClass(dayPct)}">${dayPct !== null ? sign(dayPct) + dayPct.toFixed(2) + '%' : '--'}</td>
-            <td class="${upDownClass(weekChg)}">${weekChg !== null ? sign(weekChg) + weekChg.toFixed(4) : '--'}</td>
-            <td class="${upDownClass(monthChg)}">${monthChg !== null ? sign(monthChg) + monthChg.toFixed(4) : '--'}</td>
-        `;
-        tbody.appendChild(tr);
+    // KPI 1: 总资产规模
+    let totalLatest = 0, totalPrev = 0;
+    for (const t of filteredTargets) {
+        const latest = rawData.records[range[range.length-1]][t];
+        if (latest) totalLatest += latest[currentMetric] || 0;
+        if (range.length > 1) {
+            const prev = rawData.records[range[0]][t];
+            if (prev) totalPrev += prev[currentMetric] || 0;
+        }
     }
+    const totalChange = totalLatest - totalPrev;
+    const totalChangePct = totalPrev !== 0 ? (totalChange / totalPrev * 100) : 0;
+
+    // KPI 2: 净流入（最近一个交易日）
+    let dailyInflow = 0, dailyOutflow = 0;
+    if (range.length >= 2) {
+        const lastDate = range[range.length-1];
+        const prevDate = range[range.length-2];
+        for (const t of filteredTargets) {
+            const last = rawData.records[lastDate][t];
+            const prev = rawData.records[prevDate][t];
+            if (last && prev) {
+                const chg = last[currentMetric] - prev[currentMetric];
+                if (chg > 0) dailyInflow += chg;
+                else dailyOutflow += Math.abs(chg);
+            }
+        }
+    }
+    const netFlow = dailyInflow - dailyOutflow;
+
+    // KPI 3: 期内累计变化
+    const periodLabel = currentRange === 'all' ? '全部时间' :
+        currentRange === 30 ? '近1月' :
+        currentRange === 90 ? '近3月' : '近半年';
+    const periodStart = range[0];
+    const periodEnd = range[range.length-1];
+
+    row.innerHTML = `
+        <div class="kpi-card ${totalChange > 0 ? 'up' : (totalChange < 0 ? 'down' : '')}">
+            <div class="label">总${cfg.label}（${CATEGORY_LABEL[currentCategory]}）</div>
+            <div class="value">${totalLatest.toFixed(2)} ${cfg.unit}</div>
+            <div class="change ${totalChange > 0 ? 'up' : (totalChange < 0 ? 'down' : '')}">
+                ${totalChange >= 0 ? '+' : ''}${totalChange.toFixed(2)} ${cfg.unit} (${totalChangePct >= 0 ? '+' : ''}${totalChangePct.toFixed(2)}%)
+            </div>
+            <div class="change">${periodLabel} (${periodStart} ~ ${periodEnd})</div>
+        </div>
+        <div class="kpi-card ${netFlow > 0 ? 'up' : (netFlow < 0 ? 'down' : '')}">
+            <div class="label">最近交易日 净流入</div>
+            <div class="value">${netFlow >= 0 ? '+' : ''}${netFlow.toFixed(2)} ${cfg.unit}</div>
+            <div class="change">流入 ${dailyInflow.toFixed(2)} | 流出 ${dailyOutflow.toFixed(2)}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">覆盖标的数</div>
+            <div class="value">${filteredTargets.length}</div>
+            <div class="change">交易日: ${range.length} 天</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">${currentPeriod === 'day' ? '日' : (currentPeriod === 'week' ? '周' : '月')}均${cfg.short}变化</div>
+            <div class="value">${(totalChange / Math.max(1, range.length - 1)).toFixed(4)}</div>
+            <div class="change">${cfg.unit}/${currentPeriod === 'day' ? '日' : (currentPeriod === 'week' ? '周' : '月')}</div>
+        </div>
+    `;
 }
 
 // ============================================================
-// 渲染：总趋势图
+// 累计净流入排行
+// ============================================================
+function renderFlowRanking() {
+    if (charts.flow) charts.flow.dispose();
+    charts.flow = echarts.init(document.getElementById('flowChart'));
+
+    const range = getDateRange();
+    const filteredTargets = getFilteredTargets();
+    const cfg = getMetricConfig();
+
+    // 计算每个标的的累计净变化
+    const cumulative = [];
+    for (const t of filteredTargets) {
+        let start = rawData.records[range[0]][t];
+        let end = rawData.records[range[range.length-1]][t];
+        if (!start || !end) continue;
+        const startVal = start[currentMetric];
+        const endVal = end[currentMetric];
+        if (startVal === null || endVal === null) continue;
+        cumulative.push({ target: t, change: endVal - startVal, startVal, endVal });
+    }
+    cumulative.sort((a, b) => b.change - a.change);
+
+    document.getElementById('flowSubtitle').textContent =
+        `区间: ${range[0]} ~ ${range[range.length-1]} | 指标: ${cfg.label} | 共 ${cumulative.length} 个标的`;
+
+    const targetNames = cumulative.map(c => c.target);
+    const values = cumulative.map(c => c.change);
+    const colors = values.map(v => v > 0 ? '#e74c3c' : (v < 0 ? '#27ae60' : '#999'));
+
+    charts.flow.setOption({
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            formatter: function(params) {
+                const idx = params[0].dataIndex;
+                const c = cumulative[idx];
+                const sign = c.change > 0 ? '+' : '';
+                return `<b>${c.target}</b><br>
+                    期初: ${c.startVal.toFixed(2)} ${cfg.unit}<br>
+                    期末: ${c.endVal.toFixed(2)} ${cfg.unit}<br>
+                    累计变化: <b style="color:${c.change > 0 ? '#e74c3c' : '#27ae60'}">${sign}${c.change.toFixed(2)} ${cfg.unit}</b><br>
+                    变化率: ${sign}${((c.change / c.startVal) * 100).toFixed(2)}%`;
+            }
+        },
+        grid: { left: 90, right: 30, top: 20, bottom: 30 },
+        xAxis: {
+            type: 'value',
+            name: `累计变化(${cfg.unit})`,
+            nameTextStyle: { fontSize: 11 },
+            axisLabel: { fontSize: 10 },
+        },
+        yAxis: {
+            type: 'category',
+            data: targetNames.slice().reverse(),
+            axisLabel: {
+                fontSize: 11,
+                formatter: v => {
+                    const color = TARGET_COLORS[v] || '#333';
+                    return `{${v.replace(/[^a-zA-Z0-9]/g, '_')}|${v}}`;
+                },
+                rich: Object.fromEntries(
+                    Object.entries(TARGET_COLORS).map(([k, v]) => [k.replace(/[^a-zA-Z0-9]/g, '_'), { color: v, fontWeight: 600 }])
+                ),
+            },
+        },
+        series: [{
+            type: 'bar',
+            data: values.slice().reverse().map((v, i) => ({
+                value: v,
+                itemStyle: { color: v > 0 ? '#e74c3c' : (v < 0 ? '#27ae60' : '#999') }
+            })),
+            barMaxWidth: 18,
+            label: {
+                show: true,
+                position: 'right',
+                formatter: p => {
+                    const v = p.value;
+                    return (v > 0 ? '+' : '') + v.toFixed(2);
+                },
+                fontSize: 10,
+                color: '#333',
+            },
+        }],
+    }, true);
+
+    window.addEventListener('resize', () => charts.flow && charts.flow.resize());
+}
+
+// ============================================================
+// 总趋势图
 // ============================================================
 function renderMainChart() {
     if (charts.main) charts.main.dispose();
@@ -596,8 +732,9 @@ function renderMainChart() {
     const range = getDateRange();
     const cfg = getMetricConfig();
 
+    document.getElementById('mainChartTitle').textContent = `${cfg.label}趋势对比`;
     document.getElementById('mainChartSubtitle').textContent =
-        `${cfg.label}趋势 | ${currentPeriod === 'day' ? '按天' : (currentPeriod === 'week' ? '按周' : '按月')} | ${filteredTargets.length} 个标的`;
+        `${currentPeriod === 'day' ? '按天' : (currentPeriod === 'week' ? '按周' : '按月')} | 范围: ${range[0]} ~ ${range[range.length-1]} | 共 ${filteredTargets.length} 个标的`;
 
     const series = filteredTargets.map(t => {
         const data = aggregateByPeriod(getTargetSeries(t, currentMetric), currentPeriod);
@@ -605,41 +742,46 @@ function renderMainChart() {
             name: t,
             type: 'line',
             smooth: true,
-            symbol: 'circle',
-            symbolSize: 4,
+            symbol: 'none',
             data: data.map(d => d.value),
             itemStyle: { color: TARGET_COLORS[t] || '#999' },
-            lineStyle: { width: 2 },
+            lineStyle: { width: 1.5 },
+            emphasis: { focus: 'series', lineStyle: { width: 3 } },
         };
     });
+
+    // X 轴数据
+    let xData = [];
+    if (filteredTargets.length > 0) {
+        const data = aggregateByPeriod(getTargetSeries(filteredTargets[0], currentMetric), currentPeriod);
+        xData = data.map(d => d.date);
+    }
 
     charts.main.setOption({
         tooltip: {
             trigger: 'axis',
             formatter: function(params) {
                 let html = `<b>${params[0].axisValue}</b><br>`;
-                params.forEach(p => {
+                params.slice(0, 10).forEach(p => {  // 限制显示前10个
                     if (p.value !== null && p.value !== undefined) {
-                        html += `${p.marker} ${p.seriesName}: ${p.value.toFixed(4)} ${cfg.unit}<br>`;
+                        html += `${p.marker} ${p.seriesName}: ${p.value.toFixed(2)} ${cfg.unit}<br>`;
                     }
                 });
+                if (params.length > 10) html += `... 等共 ${params.length} 个标的`;
                 return html;
             }
         },
-        legend: { type: 'scroll', bottom: 0, textStyle: { fontSize: 11 } },
+        legend: {
+            type: 'scroll',
+            bottom: 0,
+            textStyle: { fontSize: 11 },
+            data: filteredTargets.map(t => ({ name: t, icon: 'rect' })),
+        },
         grid: { left: 80, right: 30, top: 30, bottom: 60 },
         xAxis: {
             type: 'category',
-            data: (() => {
-                // X 轴显示范围 - 用第一个标的的数据
-                if (filteredTargets.length === 0) return [];
-                const data = aggregateByPeriod(getTargetSeries(filteredTargets[0], currentMetric), currentPeriod);
-                return data.map(d => d.date);
-            })(),
-            axisLabel: {
-                fontSize: 10,
-                formatter: v => v.length === 7 ? v : v.substring(5),
-            },
+            data: xData,
+            axisLabel: { fontSize: 10, formatter: v => v.length === 7 ? v : v.substring(5) },
         },
         yAxis: {
             type: 'value',
@@ -649,7 +791,7 @@ function renderMainChart() {
         },
         dataZoom: [
             { type: 'inside', start: 70, end: 100 },
-            { type: 'slider', start: 70, end: 100, height: 20, bottom: 40 },
+            { type: 'slider', start: 70, end: 100, height: 18, bottom: 35 },
         ],
         series,
     }, true);
@@ -658,77 +800,247 @@ function renderMainChart() {
 }
 
 // ============================================================
-// 渲染：日变化柱状图
+// 热力图
 // ============================================================
-function renderDailyChangeChart() {
-    if (charts.change) charts.change.dispose();
-    charts.change = echarts.init(document.getElementById('dailyChangeChart'));
+function renderHeatmap() {
+    if (charts.heatmap) charts.heatmap.dispose();
+    charts.heatmap = echarts.init(document.getElementById('heatmapChart'));
 
-    const filteredTargets = getFilteredTargets();
     const range = getDateRange();
+    const filteredTargets = getFilteredTargets();
     const cfg = getMetricConfig();
 
-    document.getElementById('changeChartSubtitle').textContent =
-        `${cfg.label}变化量 | ${currentPeriod === 'day' ? '按天' : (currentPeriod === 'week' ? '按周' : '按月')}`;
+    // 只取最近 60 个交易日（避免太宽）
+    const recentRange = range.slice(-60);
 
-    const series = filteredTargets.map(t => {
-        const data = aggregateByPeriod(getTargetSeries(t, currentMetric), currentPeriod);
-        return {
-            name: t,
-            type: 'bar',
-            data: data.map(d => d.change),
-            itemStyle: { color: TARGET_COLORS[t] || '#999' },
-            barMaxWidth: 16,
-        };
-    });
-
-    // X 轴 - 使用第一个标的的日期
-    let xData = [];
-    if (filteredTargets.length > 0) {
-        const data = aggregateByPeriod(getTargetSeries(filteredTargets[0], currentMetric), currentPeriod);
-        xData = data.map(d => d.date);
+    // 计算热力图数据
+    const data = [];
+    let maxAbs = 0;
+    for (let ti = 0; ti < filteredTargets.length; ti++) {
+        const t = filteredTargets[ti];
+        for (let di = 0; di < recentRange.length; di++) {
+            const d = recentRange[di];
+            const series = getTargetSeries(t, currentMetric);
+            const item = series.find(s => s.date === d);
+            if (item && item.changePct !== null) {
+                data.push([di, ti, item.changePct]);
+                maxAbs = Math.max(maxAbs, Math.abs(item.changePct));
+            } else {
+                data.push([di, ti, '-']);
+            }
+        }
     }
 
-    charts.change.setOption({
+    charts.heatmap.setOption({
         tooltip: {
-            trigger: 'axis',
+            position: 'top',
             formatter: function(params) {
-                let html = `<b>${params[0].axisValue}</b><br>`;
-                params.forEach(p => {
-                    if (p.value !== null && p.value !== undefined) {
-                        const sign = p.value > 0 ? '+' : '';
-                        const color = p.value > 0 ? '#e74c3c' : '#27ae60';
-                        html += `${p.marker} ${p.seriesName}: <span style="color:${color}">${sign}${p.value.toFixed(4)}</span> ${cfg.unit}<br>`;
-                    }
-                });
-                return html;
+                if (params.value[2] === '-' || params.value[2] === null) return '无数据';
+                const sign = params.value[2] > 0 ? '+' : '';
+                return `${filteredTargets[params.value[1]]}<br>${recentRange[params.value[0]]}<br>${sign}${params.value[2].toFixed(2)}%`;
             }
         },
-        legend: { type: 'scroll', bottom: 0, textStyle: { fontSize: 11 } },
-        grid: { left: 80, right: 30, top: 30, bottom: 60 },
+        grid: { left: 100, right: 30, top: 30, bottom: 80 },
         xAxis: {
             type: 'category',
-            data: xData,
-            axisLabel: { fontSize: 10, formatter: v => v.length === 7 ? v : v.substring(5) },
+            data: recentRange,
+            splitArea: { show: true },
+            axisLabel: { fontSize: 9, rotate: 45, formatter: v => v.length === 7 ? v : v.substring(5) },
         },
         yAxis: {
-            type: 'value',
-            name: `变化量(${cfg.unit})`,
-            nameTextStyle: { fontSize: 11 },
-            axisLabel: { fontSize: 10 },
+            type: 'category',
+            data: filteredTargets,
+            splitArea: { show: true },
+            axisLabel: {
+                fontSize: 10,
+                formatter: v => {
+                    const color = TARGET_COLORS[v] || '#333';
+                    return `{${v.replace(/[^a-zA-Z0-9]/g, '_')}|${v}}`;
+                },
+                rich: Object.fromEntries(
+                    Object.entries(TARGET_COLORS).map(([k, v]) => [k.replace(/[^a-zA-Z0-9]/g, '_'), { color: v, fontWeight: 600 }])
+                ),
+            },
         },
-        dataZoom: [
-            { type: 'inside' },
-            { type: 'slider', height: 20, bottom: 40 },
-        ],
-        series,
+        visualMap: {
+            min: -maxAbs,
+            max: maxAbs,
+            calculable: true,
+            orient: 'horizontal',
+            left: 'center',
+            bottom: 10,
+            inRange: {
+                color: ['#27ae60', '#a8d8b8', '#f5f7fa', '#f5b7b1', '#e74c3c'],
+            },
+            text: ['流入(%)', '流出(%)'],
+            textStyle: { fontSize: 10 },
+        },
+        series: [{
+            name: '变化率',
+            type: 'heatmap',
+            data: data,
+            label: { show: false },
+            emphasis: {
+                itemStyle: {
+                    shadowBlur: 10,
+                    shadowColor: 'rgba(0, 0, 0, 0.5)'
+                }
+            },
+        }],
     }, true);
 
-    window.addEventListener('resize', () => charts.change && charts.change.resize());
+    window.addEventListener('resize', () => charts.heatmap && charts.heatmap.resize());
 }
 
 // ============================================================
-// 渲染：各标的详细图表
+// 详细数据表 (with Sparkline)
+// ============================================================
+function renderTable() {
+    const range = getDateRange();
+    const filteredTargets = getFilteredTargets();
+    const cfg = getMetricConfig();
+
+    // 计算每个标的的统计
+    const stats = [];
+    for (const t of filteredTargets) {
+        const series = getTargetSeries(t, currentMetric);
+        const firstItem = series[0];
+        const lastItem = series[series.length - 1];
+        if (!firstItem || !lastItem || firstItem.value === null || lastItem.value === null) continue;
+
+        const cumulativeChange = lastItem.value - firstItem.value;
+        const changePct = firstItem.value !== 0 ? (cumulativeChange / firstItem.value * 100) : 0;
+        const lastChange = lastItem.change;
+        const lastChangePct = lastItem.changePct;
+
+        // 计算期内最大单日变化
+        let maxDailyChange = 0, minDailyChange = 0;
+        for (const s of series) {
+            if (s.change !== null) {
+                if (s.change > maxDailyChange) maxDailyChange = s.change;
+                if (s.change < minDailyChange) minDailyChange = s.change;
+            }
+        }
+
+        stats.push({
+            target: t,
+            latest: lastItem.value,
+            cumulativeChange,
+            changePct,
+            lastChange,
+            lastChangePct,
+            maxDailyChange,
+            minDailyChange,
+            series,
+        });
+    }
+
+    // 排序
+    stats.sort((a, b) => {
+        let va = a[tableSortKey], vb = b[tableSortKey];
+        if (va === null || va === undefined) va = -Infinity;
+        if (vb === null || vb === undefined) vb = -Infinity;
+        if (tableSortDir === 'asc') return va - vb;
+        return vb - va;
+    });
+
+    // 表头
+    const head = document.getElementById('tableHead');
+    head.innerHTML = `
+        <tr>
+            <th data-sort="target" style="cursor:pointer;">标的 ${tableSortKey === 'target' ? (tableSortDir === 'asc' ? '↑' : '↓') : ''}</th>
+            <th data-sort="latest" style="cursor:pointer;">最新 ${cfg.short} ${tableSortKey === 'latest' ? (tableSortDir === 'asc' ? '↑' : '↓') : ''}</th>
+            <th data-sort="lastChange" style="cursor:pointer;">日变化 ${tableSortKey === 'lastChange' ? (tableSortDir === 'asc' ? '↑' : '↓') : ''}</th>
+            <th data-sort="lastChangePct" style="cursor:pointer;">日变化%</th>
+            <th data-sort="cumulativeChange" style="cursor:pointer;">期内累计 ${tableSortKey === 'cumulativeChange' ? (tableSortDir === 'asc' ? '↑' : '↓') : ''}</th>
+            <th data-sort="changePct" style="cursor:pointer;">期内变化%</th>
+            <th data-sort="maxDailyChange" style="cursor:pointer;">最大单日变化</th>
+            <th data-sort="minDailyChange" style="cursor:pointer;">最大单日赎回</th>
+            <th>趋势(期内)</th>
+        </tr>
+    `;
+
+    // 表行
+    const body = document.getElementById('tableBody');
+    body.innerHTML = '';
+    for (const s of stats) {
+        const tr = document.createElement('tr');
+        const upDown = v => v > 0 ? 'change-up' : (v < 0 ? 'change-down' : 'change-neutral');
+        const sign = v => v > 0 ? '+' : '';
+        const pctSign = v => v > 0 ? '+' : '';
+        const color = TARGET_COLORS[s.target] || '#333';
+
+        tr.innerHTML = `
+            <td class="target-name">
+                <span class="color-dot" style="background:${color}"></span>${s.target}
+            </td>
+            <td><b>${s.latest.toFixed(4)}</b></td>
+            <td class="${upDown(s.lastChange)}">${s.lastChange !== null ? sign(s.lastChange) + s.lastChange.toFixed(4) : '--'}</td>
+            <td class="${upDown(s.lastChangePct)}">${s.lastChangePct !== null ? pctSign(s.lastChangePct) + s.lastChangePct.toFixed(2) + '%' : '--'}</td>
+            <td class="${upDown(s.cumulativeChange)}">${sign(s.cumulativeChange)}${s.cumulativeChange.toFixed(2)}</td>
+            <td class="${upDown(s.changePct)}">${pctSign(s.changePct)}${s.changePct.toFixed(2)}%</td>
+            <td class="change-up">${sign(s.maxDailyChange)}${s.maxDailyChange.toFixed(2)}</td>
+            <td class="change-down">${s.minDailyChange.toFixed(2)}</td>
+            <td class="sparkline-cell"><div id="spark_${s.target}" style="width:100%;height:100%;"></div></td>
+        `;
+        body.appendChild(tr);
+    }
+
+    // 表头点击排序
+    head.querySelectorAll('th[data-sort]').forEach(th => {
+        th.addEventListener('click', () => {
+            const key = th.dataset.sort;
+            if (key === 'target') {
+                // 按名称字母排序
+                if (tableSortKey === 'target') {
+                    tableSortDir = tableSortDir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    tableSortKey = 'target';
+                    tableSortDir = 'asc';
+                }
+            } else {
+                if (tableSortKey === key) {
+                    tableSortDir = tableSortDir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    tableSortKey = key;
+                    tableSortDir = 'desc';
+                }
+            }
+            renderTable();
+        });
+    });
+
+    // 渲染 sparkline
+    for (const s of stats) {
+        setTimeout(() => {
+            const dom = document.getElementById(`spark_${s.target}`);
+            if (!dom) return;
+            const chart = echarts.init(dom);
+            chart.setOption({
+                grid: { left: 0, right: 0, top: 2, bottom: 2 },
+                xAxis: { type: 'category', show: false, data: s.series.map(d => d.date) },
+                yAxis: { type: 'value', show: false, scale: true },
+                tooltip: { show: false },
+                series: [{
+                    type: 'line',
+                    data: s.series.map(d => d.value),
+                    symbol: 'none',
+                    smooth: true,
+                    lineStyle: { width: 1.5, color: color },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: color + '60' },
+                            { offset: 1, color: color + '10' },
+                        ])
+                    },
+                }],
+            });
+        }, 30);
+    }
+}
+
+// ============================================================
+// 详细图表 - 各标的
 // ============================================================
 function renderDetailCharts() {
     const section = document.getElementById('detailSection');
@@ -736,7 +1048,7 @@ function renderDetailCharts() {
     const filteredTargets = getFilteredTargets();
     const cfg = getMetricConfig();
 
-    // 清理旧的 chart 实例
+    // 清理旧的 detail chart 实例
     for (const key in charts) {
         if (key.startsWith('detail_')) {
             charts[key].dispose();
@@ -755,15 +1067,16 @@ function renderDetailCharts() {
         const card = document.createElement('div');
         card.className = 'chart-card';
         card.innerHTML = `
-            <h3>
-                <span style="color:${TARGET_COLORS[t] || '#333'}">${t} ${cfg.label}趋势</span>
-                <span class="badge ${badgeClass}">${currentPeriod === 'day' ? '日' : (currentPeriod === 'week' ? '周' : '月')}变化 ${badgeText} ${cfg.unit}</span>
-            </h3>
-            <div class="chart-container" id="chart_${t}"></div>
+            <div class="chart-title" style="font-size:14px;margin-bottom:8px;">
+                <span style="color:${TARGET_COLORS[t] || '#333'}">${t}</span>
+                <span class="legend-info">
+                    <span class="${changeVal > 0 ? 'up' : (changeVal < 0 ? 'down' : '')}">${badgeText} ${cfg.unit}</span>
+                </span>
+            </div>
+            <div class="chart-container short" id="chart_${t}"></div>
         `;
         section.appendChild(card);
 
-        // 渲染图表
         setTimeout(() => {
             const chartDom = document.getElementById(`chart_${t}`);
             if (!chartDom) return;
@@ -778,13 +1091,15 @@ function renderDetailCharts() {
                         let html = `<b>${params[0].axisValue}</b><br>`;
                         params.forEach(p => {
                             if (p.value !== null && p.value !== undefined) {
-                                html += `${p.marker} ${p.seriesName}: ${p.value.toFixed(4)} ${cfg.unit}<br>`;
+                                const sign = p.value > 0 ? '+' : '';
+                                const color = p.value > 0 ? '#e74c3c' : '#27ae60';
+                                html += `${p.marker} ${p.seriesName}: <span style="color:${color}">${sign}${p.value.toFixed(4)}</span> ${cfg.unit}<br>`;
                             }
                         });
                         return html;
                     }
                 },
-                grid: { left: 70, right: 40, top: 30, bottom: 40 },
+                grid: { left: 65, right: 50, top: 20, bottom: 30 },
                 xAxis: {
                     type: 'category',
                     data: dataAgg.map(d => d.date),
@@ -794,19 +1109,19 @@ function renderDetailCharts() {
                     {
                         type: 'value',
                         name: cfg.yAxisName,
-                        nameTextStyle: { fontSize: 10 },
+                        nameTextStyle: { fontSize: 9 },
                         axisLabel: { fontSize: 9 },
                         position: 'left',
                     },
                     {
                         type: 'value',
                         name: `变化(${cfg.unit})`,
-                        nameTextStyle: { fontSize: 10 },
+                        nameTextStyle: { fontSize: 9 },
                         axisLabel: { fontSize: 9 },
                         position: 'right',
                     },
                 ],
-                dataZoom: [{ type: 'inside', start: 60 }],
+                dataZoom: [{ type: 'inside', start: 50 }],
                 series: [
                     {
                         name: cfg.label,
@@ -825,7 +1140,7 @@ function renderDetailCharts() {
                         itemStyle: { color: color },
                     },
                     {
-                        name: `${currentPeriod === 'day' ? '日' : (currentPeriod === 'week' ? '周' : '月')}变化`,
+                        name: '变化',
                         type: 'bar',
                         yAxisIndex: 1,
                         barMaxWidth: 8,
@@ -845,8 +1160,17 @@ function renderDetailCharts() {
 }
 
 // ============================================================
-// 初始化
+// 主渲染
 // ============================================================
+function renderAll() {
+    renderKPIs();
+    renderFlowRanking();
+    renderMainChart();
+    renderHeatmap();
+    renderTable();
+    renderDetailCharts();
+}
+
 window.addEventListener('DOMContentLoaded', loadData);
 </script>
 

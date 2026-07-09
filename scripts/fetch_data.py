@@ -11,10 +11,34 @@ import os
 import sys
 import datetime
 import traceback
-import re
 
-import akshare as ak
-import pandas as pd
+# 在 import akshare 之前先抑制 tqdm 进度条
+os.environ['TQDM_DISABLE'] = '1'
+
+# 重定向 tqdm 进度条输出
+import tqdm
+class _NullIO:
+    def write(self, *a, **k): pass
+    def flush(self, *a, **k): pass
+
+# Monkey-patch tqdm.tqdm
+import io
+_orig_tqdm = tqdm.tqdm
+def _silent_tqdm(iterable=None, *args, **kwargs):
+    kwargs['disable'] = True
+    kwargs['file'] = _NullIO()
+    if iterable is not None:
+        return _orig_tqdm(iterable, *args, **kwargs)
+    return _orig_tqdm(*args, **kwargs)
+tqdm.tqdm = _silent_tqdm
+
+# 抑制 ak 内部可能用到的进度条
+try:
+    import akshare as ak
+    import pandas as pd
+except Exception as e:
+    print(f"导入 akshare 失败: {e}")
+    sys.exit(1)
 
 
 # ============================================================
@@ -22,11 +46,11 @@ import pandas as pd
 # 匹配顺序：更具体的关键词优先，避免子串冲突
 # ============================================================
 TARGET_KEYWORDS = [
-    # 科创系列（更具体的先匹配）
-    ("科创半导体", ["科创半导体"]),
-    ("科创芯片", ["科创芯片"]),
+    # 科创系列（更具体的先匹配）—— 注意：含"科创"的优先于"芯片"/"半导体"
+    ("科创半导体", ["科创半导体", "科创半导"]),
+    ("科创芯片", ["科创芯片", "芯片科创", "科创芯", "科创板芯"]),
     ("科创100", ["科创100"]),
-    ("科创50", ["科创50"]),
+    ("科创50", ["科创50", "科创板50", "科创五零", "50科创", "科创50E", "科创50基", "科创50增", "科创50指", "上证科创", "科创指数"]),
     # 双创
     ("双创50", ["双创50", "双创"]),
     # A500 vs 500 冲突处理
@@ -44,17 +68,31 @@ TARGET_KEYWORDS = [
     ("国证2000", ["国证2000"]),
     # 商品 ETF
     ("黄金", ["黄金"]),
+    # 白银: 包括 白银基金、白银ETF、恒生白银等
     ("白银", ["白银"]),
     # 行业/主题 ETF
-    ("创新药", ["创新药", "医药创新"]),
-    ("有色金属", ["有色金属"]),
+    # 创新药: 含"创新药"或"医药创新"
+    ("创新药", ["创新药", "医药创新", "HK创新药", "港股创新药", "创新药企", "港股通创新药"]),
+    # 有色金属: 必须含"有色"且不能是"工业有色"等子分类
+    # 简单方案：含"有色"且不含"工业"
+    ("有色金属", ["有色"]),
+    # 光伏
     ("光伏", ["光伏"]),
-    ("半导体", ["半导体"]),  # 注意：不含"科创"的半导体ETF
-    ("芯片", ["芯片"]),      # 注意：不含"科创"的芯片ETF
+    # 半导体: 含"半导体"但不含"科创"
+    ("半导体", ["半导体"]),
+    # 芯片: 含"芯片"但不含"科创"
+    ("芯片", ["芯片"]),
 ]
 
 # 排除关键词：这些基金不是直接的ETF
 EXCLUDE_KEYWORDS = ["联接", "LOF", "增强"]
+
+# 优先级排除：当名称同时匹配多个标的时，某些特定组合优先排除其他
+NEGATIVE_KEYWORDS = {
+    "有色金属": ["工业"],  # 工业有色不算"有色金属"标的
+    "半导体": [],          # 半导体
+    "芯片": [],
+}
 
 
 def match_target(name: str) -> str | None:
@@ -70,6 +108,16 @@ def match_target(name: str) -> str | None:
 
     # 按优先级顺序匹配
     for target, keywords in TARGET_KEYWORDS:
+        # 检查负向关键词
+        neg_kws = NEGATIVE_KEYWORDS.get(target, [])
+        skip = False
+        for neg in neg_kws:
+            if neg in name:
+                skip = True
+                break
+        if skip:
+            continue
+
         for kw in keywords:
             if kw in name:
                 return target
@@ -87,7 +135,7 @@ def fetch_sse_data(date_str: str) -> pd.DataFrame:
         if df is not None and len(df) > 0:
             return df[["基金代码", "基金简称", "基金份额"]].copy()
     except Exception as e:
-        print(f"获取上交所数据失败: {e}")
+        print(f"[warn] 获取上交所数据失败: {e}")
     return pd.DataFrame(columns=["基金代码", "基金简称", "基金份额"])
 
 
@@ -104,13 +152,13 @@ def fetch_szse_data(date_str: str) -> pd.DataFrame:
         if df is not None and len(df) > 0:
             return df[["基金代码", "基金简称", "基金份额"]].copy()
     except Exception as e:
-        print(f"获取深交所数据失败: {e}")
+        print(f"[warn] 获取深交所数据失败: {e}")
     return pd.DataFrame(columns=["基金代码", "基金简称", "基金份额"])
 
 
 def fetch_em_spot_data() -> pd.DataFrame:
     """
-    使用东方财富实时ETF数据作为备选数据源（包含最新份额和最新净值）。
+    使用东方财富实时ETF数据作为备选数据源。
     返回 DataFrame: 代码, 名称, 最新份额
     """
     try:
@@ -120,7 +168,7 @@ def fetch_em_spot_data() -> pd.DataFrame:
             result.columns = ["基金代码", "基金简称", "基金份额"]
             return result
     except Exception as e:
-        print(f"获取东方财富ETF数据失败: {e}")
+        print(f"[warn] 获取东方财富ETF数据失败: {e}")
     return pd.DataFrame(columns=["基金代码", "基金简称", "基金份额"])
 
 
@@ -128,9 +176,20 @@ def aggregate_by_target(df: pd.DataFrame) -> dict[str, float]:
     """
     将 ETF 数据按标的汇总，同一标的所有不同基金公司的ETF份额求和。
     返回 dict: {标的名称: 总份额(份)}
+
+    支持两种方式：
+    1. 名称关键词匹配（TARGET_KEYWORDS）
+    2. 直接通过基金代码匹配（CODE_TO_TARGET）—— 处理特殊简称
     """
     result = {}
+
+    # 先建立 code -> target 的快速查找表
+    code_to_target = {}
+    for code, target in CODE_TO_TARGET.items():
+        code_to_target[str(code)] = target
+
     for _, row in df.iterrows():
+        code = str(row["基金代码"]).strip()
         name = str(row["基金简称"])
         shares = row["基金份额"]
 
@@ -138,7 +197,13 @@ def aggregate_by_target(df: pd.DataFrame) -> dict[str, float]:
         if pd.isna(shares) or shares == 0:
             continue
 
-        target = match_target(name)
+        # 1. 先按代码精确匹配
+        target = code_to_target.get(code)
+
+        # 2. 否则按名称关键词匹配
+        if target is None:
+            target = match_target(name)
+
         if target is None:
             continue
 
@@ -151,12 +216,24 @@ def aggregate_by_target(df: pd.DataFrame) -> dict[str, float]:
     return result
 
 
+# 直接通过基金代码映射到标的（处理简称模糊的情况）
+# 比如 510050 在 SSE 中叫 "50ETF"
+CODE_TO_TARGET = {
+    "510050": "上证50",     # 50ETF (华夏上证50ETF)
+    "510100": "上证50",     # SZ50ETF (实际上跟踪上证50)
+    "510710": "上证50",     # 上50ETF
+    "510600": "上证50",     # 沪50ETF
+    "510050": "上证50",
+    "510850": "上证50",     # 工银上50
+    "510190": "上证50",     # 上证50基
+    "510800": "上证50",     # 上证50
+}
+
+
 def get_representative_etf_code(target: str) -> str | None:
     """
     获取指定标的的代表ETF代码（用于获取净值等详细信息）。
-    返回基金代码字符串。
     """
-    # 常见ETF代码映射（用代表性ETF）
     target_to_code = {
         "上证50": "510050",     # 华夏上证50ETF
         "沪深300": "510300",    # 华泰柏瑞沪深300ETF
@@ -164,17 +241,17 @@ def get_representative_etf_code(target: str) -> str | None:
         "中证1000": "512100",   # 南方中证1000ETF
         "中证A500": "159353",   # 首批中证A500ETF
         "科创50": "588000",     # 华夏科创50ETF
-        "科创100": "588200",    # 科创100ETF
-        "科创半导体": "588210", # 科创半导体ETF
-        "科创芯片": "588200",   # 备用
+        "科创100": "588190",    # 科创100ETF
+        "科创半导体": "588820", # 科创半导体设备ETF
+        "科创芯片": "588200",   # 科创芯片ETF嘉实（规模最大）
         "双创50": "159780",     # 首批双创50ETF
         "创业板指": "159915",   # 易方达创业板ETF
         "深证100": "159901",    # 易方达深证100ETF
         "国证2000": "159565",   # 国证2000ETF
         "黄金": "518880",       # 华安黄金ETF
-        "白银": "161226",       # 国泰白银基金
+        "白银": "161226",       # 国泰白银基金（LOF，目前唯一的白银基金）
         "创新药": "159992",     # 银华中证创新药产业ETF
-        "有色金属": "512400",   # 南方中证申万有色金属ETF
+        "有色金属": "159871",   # 银华中证有色金属ETF
         "光伏": "515790",       # 华泰柏瑞中证光伏产业ETF
         "半导体": "512480",     # 国联安中证全指半导体ETF
         "芯片": "159995",       # 华夏国证半导体芯片ETF
@@ -195,7 +272,7 @@ def fetch_target_nav(target: str) -> float | None:
         if df is not None and len(df) > 0 and "单位净值" in df.columns:
             return float(df["单位净值"].iloc[-1])
     except Exception as e:
-        print(f"获取 {target} 净值失败: {e}")
+        print(f"[warn] 获取 {target}({code}) 净值失败: {e}")
     return None
 
 
@@ -229,7 +306,7 @@ def fetch_daily_data(date_str: str = None) -> dict:
     if date_str is None:
         date_str = datetime.datetime.now().strftime("%Y%m%d")
 
-    print(f"正在获取 {date_str} 的 ETF 份额数据...")
+    print(f"正在获取 {date_str} 的 ETF 份额数据...", flush=True)
 
     # 优先从交易所官方获取
     sse_df = fetch_sse_data(date_str)
@@ -239,15 +316,14 @@ def fetch_daily_data(date_str: str = None) -> dict:
     combined_df = pd.concat([sse_df, szse_df], ignore_index=True)
 
     if len(combined_df) == 0:
-        # 如果交易所数据获取失败，尝试东方财富实时数据
-        print("交易所数据获取失败，尝试使用东方财富实时数据...")
+        print("交易所数据获取失败，尝试使用东方财富实时数据...", flush=True)
         em_df = fetch_em_spot_data()
         if len(em_df) == 0:
-            print("所有数据源获取失败！")
+            print("[error] 所有数据源获取失败！", flush=True)
             return {}
         combined_df = em_df
 
-    print(f"共获取 {len(combined_df)} 条 ETF 数据")
+    print(f"共获取 {len(combined_df)} 条 ETF 数据", flush=True)
 
     # 按标的汇总份额
     aggregated = aggregate_by_target(combined_df)
@@ -261,13 +337,13 @@ def fetch_daily_data(date_str: str = None) -> dict:
         result[target] = {
             "shares": shares_yi,
             "nav": round(nav, 4) if nav is not None else None,
-            "aum": round(shares_yi * nav, 2) if nav is not None else None,  # 资产规模（亿元）
+            "aum": round(shares_yi * nav, 2) if nav is not None else None,
         }
 
-    print(f"汇总后得到 {len(result)} 个标的:")
+    print(f"汇总后得到 {len(result)} 个标的:", flush=True)
     for target, info in sorted(result.items(), key=lambda x: x[1]["shares"], reverse=True):
         nav_str = f"净值:{info['nav']:.4f}" if info['nav'] else "净值:--"
-        print(f"  {target}: {info['shares']:.4f} 亿份 | {nav_str}")
+        print(f"  {target}: {info['shares']:.4f} 亿份 | {nav_str}", flush=True)
 
     return result
 
@@ -303,20 +379,20 @@ def update_data_file(filepath: str = None, date_str: str = None):
     daily_data = fetch_daily_data(date_api)
 
     if not daily_data:
-        print(f"未能获取 {date_key} 的数据，不更新文件")
+        print(f"[warn] 未能获取 {date_key} 的数据，不更新文件", flush=True)
         return
 
     # 更新数据
     data["records"][date_key] = daily_data
     data["last_update"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # 按日期排序（确保有序）
+    # 按日期排序
     sorted_records = dict(sorted(data["records"].items()))
     data["records"] = sorted_records
 
     # 保存
     save_data(filepath, data)
-    print(f"数据已更新并保存到 {filepath}")
+    print(f"[ok] 数据已更新并保存到 {filepath}", flush=True)
 
 
 if __name__ == "__main__":
