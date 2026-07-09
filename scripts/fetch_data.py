@@ -68,8 +68,10 @@ TARGET_KEYWORDS = [
     ("国证2000", ["国证2000"]),
     # 商品 ETF
     ("黄金", ["黄金"]),
-    # 白银: 包括 白银基金、白银ETF、恒生白银等
+    # 白银: 包括 国投白银LOF(161226) 等
     ("白银", ["白银"]),
+    # 机器人: 多个机器人主题ETF合并（机器人ETF华夏/南方/天弘/景顺等）
+    ("机器人", ["机器人"]),
     # 行业/主题 ETF
     # 创新药: 含"创新药"或"医药创新"
     ("创新药", ["创新药", "医药创新", "HK创新药", "港股创新药", "创新药企", "港股通创新药"]),
@@ -85,13 +87,15 @@ TARGET_KEYWORDS = [
 ]
 
 # 排除关键词：这些基金不是直接的ETF
-EXCLUDE_KEYWORDS = ["联接", "LOF", "增强"]
+# 注意：LOF 不再排除，因为国投白银LOF(161226)需要被纳入白银标的
+EXCLUDE_KEYWORDS = ["联接", "增强"]
 
 # 优先级排除：当名称同时匹配多个标的时，某些特定组合优先排除其他
 NEGATIVE_KEYWORDS = {
     "有色金属": ["工业"],  # 工业有色不算"有色金属"标的
     "半导体": [],          # 半导体
     "芯片": [],
+    "机器人": [],          # 机器人
 }
 
 
@@ -249,7 +253,8 @@ def get_representative_etf_code(target: str) -> str | None:
         "深证100": "159901",    # 易方达深证100ETF
         "国证2000": "159565",   # 国证2000ETF
         "黄金": "518880",       # 华安黄金ETF
-        "白银": "161226",       # 国泰白银基金（LOF，目前唯一的白银基金）
+        "白银": "161226",       # 国投白银LOF（唯一场内白银标的）
+        "机器人": "562500",     # 机器人ETF华夏（规模最大，164亿份）
         "创新药": "159992",     # 银华中证创新药产业ETF
         "有色金属": "159871",   # 银华中证有色金属ETF
         "光伏": "515790",       # 华泰柏瑞中证光伏产业ETF
@@ -273,6 +278,56 @@ def fetch_target_nav(target: str) -> float | None:
             return float(df["单位净值"].iloc[-1])
     except Exception as e:
         print(f"[warn] 获取 {target}({code}) 净值失败: {e}")
+    return None
+
+
+def fetch_target_nav_history(target: str, date_keys: list = None) -> dict:
+    """
+    获取指定标的代表ETF的历史单位净值数据。
+    返回 dict: {date_key(YYYY-MM-DD): 单位净值}
+
+    如果 date_keys 不为空，只返回该列表中包含的日期。
+    """
+    code = get_representative_etf_code(target)
+    if not code:
+        return {}
+    try:
+        df = ak.fund_etf_fund_info_em(fund=code)
+        if df is not None and len(df) > 0 and "单位净值" in df.columns and "净值日期" in df.columns:
+            import pandas as pd
+            df['净值日期'] = pd.to_datetime(df['净值日期'], errors='coerce').dt.date
+            result = {}
+            for _, row in df.iterrows():
+                date_key = str(row['净值日期'])
+                if date_keys is None or date_key in date_keys:
+                    result[date_key] = float(row['单位净值'])
+            return result
+    except Exception as e:
+        print(f"[warn] 获取 {target}({code}) 历史净值失败: {e}")
+    return {}
+
+
+def fetch_target_latest_aum(target: str) -> float | None:
+    """
+    获取指定标的的当前总资产规模（亿元）。
+    用于白银LOF这类没有ETF份额日报的标的。
+    """
+    code = get_representative_etf_code(target)
+    if not code:
+        return None
+    try:
+        df = ak.fund_individual_basic_info_xq(symbol=code)
+        if df is not None and len(df) > 0:
+            for _, row in df.iterrows():
+                if row.get('item') == '最新规模':
+                    val = row.get('value', '')
+                    if isinstance(val, str) and '亿' in val:
+                        try:
+                            return float(val.replace('亿', '').strip())
+                        except:
+                            pass
+    except Exception as e:
+        print(f"[warn] 获取 {target}({code}) 规模失败: {e}")
     return None
 
 
@@ -339,6 +394,24 @@ def fetch_daily_data(date_str: str = None) -> dict:
             "nav": round(nav, 4) if nav is not None else None,
             "aum": round(shares_yi * nav, 2) if nav is not None else None,
         }
+
+    # 特殊处理：白银LOF(161226)
+    # 白银目前没有场内ETF，只有国投白银LOF(161226)
+    # LOF不在 SSE/SZSE 的 ETF 份额日报中，需要通过 fund_individual_basic_info_xq 获取总规模
+    code = get_representative_etf_code("白银")
+    if "白银" not in result:
+        aum = fetch_target_latest_aum("白银")
+        nav = fetch_target_nav("白银")
+        if aum is not None and nav is not None and nav != 0:
+            shares_yi = round(aum / nav, 4)
+            result["白银"] = {
+                "shares": shares_yi,
+                "nav": round(nav, 4),
+                "aum": round(aum, 2),
+            }
+            print(f"  [特殊] 白银(LOF {code}): {shares_yi:.4f} 亿份 (推算自 AUM={aum:.2f}亿, NAV={nav:.4f})", flush=True)
+        else:
+            print(f"  [warn] 白银(LOF {code}) 数据获取失败 (AUM={aum}, NAV={nav})", flush=True)
 
     print(f"汇总后得到 {len(result)} 个标的:", flush=True)
     for target, info in sorted(result.items(), key=lambda x: x[1]["shares"], reverse=True):
