@@ -275,7 +275,6 @@
             <div class="btn-group" id="metricGroup">
                 <button class="btn active" data-metric="aum">资产规模</button>
                 <button class="btn" data-metric="shares">份额</button>
-                <button class="btn" data-metric="nav">单位净值</button>
             </div>
         </div>
         <div class="control-group">
@@ -358,7 +357,7 @@
 </div>
 
 <div class="footer">
-    数据来源：上海证券交易所 & 深圳证券交易所 ETF份额日报 + 东方财富 单位净值 | 每日 16:40 (北京时间) 自动更新<br>
+    数据来源：上海证券交易所 & 深圳证券交易所 ETF份额日报 + 东方财富（用于计算AUM） | 每日 16:40 (北京时间) 自动更新<br>
     同一标的不同基金公司的ETF份额已合并求和 | 涨=红 跌=绿（中国股市惯例） | 仅供研究参考
 </div>
 
@@ -432,7 +431,6 @@ let tableSortDir = 'desc';
 // ============================================================
 const METRIC_CONFIG = {
     shares: { label: '份额', unit: '亿份', yAxisName: '亿份', short: '份额' },
-    nav:    { label: '单位净值', unit: '元',  yAxisName: '元', short: '净值' },
     aum:    { label: '资产规模', unit: '亿元', yAxisName: '亿元', short: 'AUM' },
 };
 
@@ -679,18 +677,14 @@ function renderFlowRanking() {
         // 净值单位下用变化率%更直观
         const change = endVal - startVal;
         const changePct = startVal !== 0 ? (change / startVal) * 100 : 0;
-        const displayValue = currentMetric === 'nav' ? changePct : change;
-        cumulative.push({ target: t, change: displayValue, rawChange: change, startVal, endVal, changePct });
+        cumulative.push({ target: t, change, rawChange: change, startVal, endVal, changePct });
     }
     cumulative.sort((a, b) => b.change - a.change);
 
     // 标题根据指标切换文案
     let flowTitle = '累计净流入排行';
     let flowLabel = `累计变化(${cfg.unit})`;
-    if (currentMetric === 'nav') {
-        flowTitle = '累计净值涨幅排行';
-        flowLabel = '累计涨跌幅(%)';
-    } else if (currentMetric === 'shares') {
+    if (currentMetric === 'shares') {
         flowTitle = '累计份额变化排行';
     } else {
         flowTitle = '累计资产规模变化排行';
@@ -713,14 +707,8 @@ function renderFlowRanking() {
                 const c = cumulative[cumulative.length - 1 - idx];
                 const sign = c.change > 0 ? '+' : '';
                 const colorMain = c.change > 0 ? '#e74c3c' : '#27ae60';
-                let valueLine, changeLine;
-                if (currentMetric === 'nav') {
-                    valueLine = `<b style="color:${colorMain}">${sign}${c.change.toFixed(2)}%</b>`;
-                    changeLine = `${c.startVal.toFixed(4)} → ${c.endVal.toFixed(4)} 元`;
-                } else {
-                    valueLine = `<b style="color:${colorMain}">${sign}${c.change.toFixed(2)} ${cfg.unit}</b>`;
-                    changeLine = `${c.startVal.toFixed(2)} → ${c.endVal.toFixed(2)} ${cfg.unit}`;
-                }
+                const valueLine = `<b style="color:${colorMain}">${sign}${c.change.toFixed(2)} ${cfg.unit}</b>`;
+                const changeLine = `${c.startVal.toFixed(2)} → ${c.endVal.toFixed(2)} ${cfg.unit}`;
                 return `<b>${c.target}</b><br>
                     区间: ${changeLine}<br>
                     累计变化: ${valueLine}<br>
