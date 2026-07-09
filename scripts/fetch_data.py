@@ -340,10 +340,30 @@ def load_data(filepath: str) -> dict:
 
 
 def save_data(filepath: str, data: dict):
-    """保存 JSON 数据文件"""
+    """保存 JSON 数据文件
+
+    关键：使用 allow_nan=False 确保输出标准 JSON（浏览器可解析）。
+    任何 NaN/Infinity 都会转为 None 字符串化输出。
+    """
+    import math
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+    # 预处理：将 NaN 转为 None
+    def clean_for_json(obj):
+        if isinstance(obj, float):
+            if math.isnan(obj) or math.isinf(obj):
+                return None
+            return obj
+        elif isinstance(obj, dict):
+            return {k: clean_for_json(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [clean_for_json(v) for v in obj]
+        return obj
+
+    cleaned = clean_for_json(data)
     with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        # allow_nan=False：若还有 NaN 会抛 ValueError，便于发现
+        json.dump(cleaned, f, ensure_ascii=False, indent=2, allow_nan=False)
 
 
 def shares_to_yi(shares: float) -> float:
